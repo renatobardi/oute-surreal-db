@@ -1,5 +1,5 @@
-# SurrealDB isolado para os projetos Oute. Instância NOVA: não compartilha rede, volume,
-# alias nem container com o oute-agent (oute-surrealdb) ou qualquer outra stack do host.
+# SurrealDB central dos projetos Oute. Roda dentro do LXC oute-surreal-db:
+# rede, disco e Docker próprios — nada compartilhado com outra stack.
 #
 # Uso (na raiz do repo, com .env preenchido):
 #   docker compose --env-file .env -f docker/docker-compose.yml up -d
@@ -26,9 +26,7 @@ services:
     mem_limit: ${SURREAL_MEM_LIMIT:-2g}
     cpus: ${SURREAL_CPUS:-1}
     ports:
-      # Só na bridge lxdbr0. Outros containers Docker do host ainda alcançam este IP:
-      # o bloqueio deles é feito pelo firewall (scripts/firewall_surreal.sh).
-      - "${SURREAL_BIND_IP:-10.173.117.1}:${SURREAL_PORT:-8000}:8000"
+      - "${SURREAL_PORT:-8000}:8000"
     volumes:
       - ${SURREAL_DATA_DIR:?defina SURREAL_DATA_DIR no .env}:/data/surrealdb
     healthcheck:
@@ -37,11 +35,3 @@ services:
       timeout: 5s
       retries: 6
       start_period: 20s
-    networks: [surreal]
-
-networks:
-  surreal:
-    name: oute-surreal-db
-    driver_opts:
-      # Nome fixo da bridge para o firewall referenciar (máx. 15 chars).
-      com.docker.network.bridge.name: br-oute-sdb

@@ -11,10 +11,16 @@ Fora do escopo: **oute-agent** (SurrealDB próprio, ADR-08: dado derivado, isola
 
 ## Decisões (2026-10-18)
 
+- **Instância central** de SurrealDB (não embutida por projeto): é o propósito deste repo; novos projetos entram como namespace.
+- **Databases `prd`/`test`**, criadas só onde o ambiente existe (`kubo:prd,test obo:prd`).
+- **Dois usuários por database**: `app_<db>` OWNER (aplicação) e `ro_<db>` VIEWER (backup/leitura).
+- **Pilotos**: kubo-test → kubo-prd → obo (surreal); financial-control → frentes-engenharia → hanko (supabase).
+- **hanko** é app próprio: migra só o Postgres (`HANKO_DATABASE_URL`). Supabase Auth/Storage ficam como opção futura.
+- **Repo oute-supabase-db**: reset para repo próprio só com `docker/` + nossos arquivos, sem amarra ao upstream (reescrita da `master` só com ok explícito).
 - **LXC por stack**, não Docker no host. Isolamento por construção (rede, disco, Docker próprios), sem regras `DOCKER-USER`, sem choque de porta 8000 entre Supabase e SurrealDB, backup via `lxc snapshot`/`export`.
 - SurrealDB **v3.3.0** por digest, RocksDB, `user 10001`, `mem_limit 2g`, `cpus 1`.
-- Um **namespace por projeto**, databases por ambiente, usuário OWNER por database. Senhas no cofre (Vaultwarden).
-- Acesso só pela `lxdbr0` (IP do LXC); dentro do LXC o compose publica a porta no IP do `eth0`.
+- Um **namespace por projeto** (hífen → underscore). Senhas no cofre (Vaultwarden).
+- Acesso só pela `lxdbr0` (IP do LXC); dentro do LXC o compose publica `:8000`. Dados em `/srv/oute-surreal-db/data` (10001:10001).
 - Backup: snapshot do LXC. Dump SurrealQL fica pra depois.
 - Migração: `surreal export` na origem → `surreal import` no destino; origem viva até confirmar; rollback = URL antiga.
 
@@ -36,21 +42,15 @@ Achado: kubo e obo passam a senha root em `--pass` na linha de comando (visível
 ## Arquivos
 
 - `docker/docker-compose.yml`, `.env.example`, `scripts/init_surreal.sh` (idempotente; `--rotate [projeto]`), `scripts/oute-assessment.sh`, `docs/plano.html`.
-- `scripts/firewall_surreal.sh` + `systemd/oute-surreal-firewall.service`: do desenho anterior (Docker no host). **Saem** quando o compose for ajustado para o LXC.
-- **Pendente**: compose/.env ainda refletem o desenho anterior (bind em `10.173.117.1`, bridge nomeada). Ajuste após as decisões abaixo.
+- Firewall de host e unit systemd do desenho anterior foram removidos: o LXC isola por construção.
 
 ## Perguntas abertas
 
-1. Central SurrealDB só para kubo+obo vale, ou cada um segue com o seu embutido (só padronizando versão)?
-2. hanko é o teamhanko (passkeys) ou app próprio? Se teamhanko, Supabase Auth pode substituí-lo.
-3. Repo oute-supabase-db: reset para só `docker/` + nossos arquivos, ou sparse-checkout do fork?
-4. Nome das databases: `prd`/`test` (espelha LXCs) ou `prod`/`dev`?
-5. Usuário read-only por database (kubo usa `kubo_ro`): criar?
-6. Pilotos: kubo-test (surreal) e financial-control (supabase)?
+Nenhuma. Próximo passo: F2.
 
 ## Fases
 
-1. **Preparação** (esta branch): assessments, divisão, decisões, docs. ✔ (falta ajustar compose p/ LXC)
+1. **Preparação** (esta branch): assessments, divisão, decisões, docs, compose/init para o LXC. ✔
 2. **LXC oute-surreal-db**: `lxc launch` (perfil padrão, Docker dentro), repo em `/opt/oute-surreal-db`, `.env` 600, `compose up`, `init_surreal.sh`, senhas no cofre. Verificar: healthy; de kubo-test `curl http://<ip>:8000/health` ok; do host Docker nada chega além da lxdbr0.
 3. **Piloto kubo-test** → kubo-prd: export/import, apontar app, validar, rollback definido.
 4. **obo**: export v2 → import v3, rodada de testes do app.

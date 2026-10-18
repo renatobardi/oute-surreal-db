@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 #
 # init_surreal.sh
-# Cria um namespace por projeto, databases dev/prod e um usuário OWNER (app_dev / app_prod) por database.
+# Para cada projeto:ambientes em SURREAL_PROJECTS cria namespace, databases e dois usuários por database:
+#   app_<db>  ROLES OWNER   (a aplicação)
+#   ro_<db>   ROLES VIEWER  (backup, consultas, leitura)
 # Idempotente: usuários existentes NÃO são tocados. Para gerar senhas novas use --rotate [projeto...].
 # Senhas são impressas UMA vez; guarde no cofre. Nada é salvo em disco.
 #
-# Uso (no servidor, na raiz do repo, com .env preenchido):
+# Uso (no LXC, na raiz do repo, com .env preenchido):
 #   ./scripts/init_surreal.sh                 # cria o que falta
 #   ./scripts/init_surreal.sh --rotate kubo   # recria senhas só do projeto kubo
 #   ./scripts/init_surreal.sh --rotate        # recria senhas de todos (derruba apps!)
@@ -51,22 +53,30 @@ should_rotate() { # project
   return 1
 }
 
-for project in ${SURREAL_PROJECTS}; do
+define_user() { # ns db user role project
+  if user_exists "$1" "$2" "$3" && ! should_rotate "$5"; then
+    echo "ns=$1 db=$2 user=$3 (já existe, mantido)"
+    return
+  fi
+  local pass
+  pass="$(openssl rand -base64 32 | tr -d '/+=\n')"
+  sql --ns "$1" --db "$2" <<<"DEFINE USER OVERWRITE $3 ON DATABASE PASSWORD '${pass}' ROLES $4;" >/dev/null
+  echo "ns=$1 db=$2 user=$3 role=$4 pass=${pass}"
+}
+
+for entry in ${SURREAL_PROJECTS}; do
+  project="${entry%%:*}"
+  dbs="${entry#*:}"
+  [ "${dbs}" != "${entry}" ] || { echo "ERRO: '${entry}' sem ambientes (use projeto:prd,test)" >&2; exit 1; }
   ns="${project//-/_}"
-  for db in dev prod; do
+  for db in ${dbs//,/ }; do
     sql <<SQL >/dev/null
 DEFINE NAMESPACE IF NOT EXISTS ${ns};
 USE NS ${ns};
 DEFINE DATABASE IF NOT EXISTS ${db};
 SQL
-    user="app_${db}"
-    if user_exists "${ns}" "${db}" "${user}" && ! should_rotate "${project}"; then
-      echo "ns=${ns} db=${db} user=${user} (já existe, mantido)"
-      continue
-    fi
-    pass="$(openssl rand -base64 32 | tr -d '/+=\n')"
-    sql --ns "${ns}" --db "${db}" <<<"DEFINE USER OVERWRITE ${user} ON DATABASE PASSWORD '${pass}' ROLES OWNER;" >/dev/null
-    echo "ns=${ns} db=${db} user=${user} pass=${pass}"
+    define_user "${ns}" "${db}" "app_${db}" OWNER "${project}"
+    define_user "${ns}" "${db}" "ro_${db}" VIEWER "${project}"
   done
 done
 
