@@ -1,2 +1,7 @@
 # oute-surreal-db
-Repo para servidor de Banco de dados o Oute usando SurrealDB
+
+SurrealDB isolado para os projetos Oute no `oute-server`: um container, rede e disco próprios,
+um namespace por projeto (`dev`/`prod`), acesso só pela rede LXD.
+
+- Plano, decisões e fases: `SUMMARY.md` e `docs/plano.html`
+- Assessment do servidor (read-only): `./scripts/oute-assessment.sh`

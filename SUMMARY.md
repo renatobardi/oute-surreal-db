@@ -1,66 +1,61 @@
-# Projeto: Consolidização do SurrealDB
+# Projeto: bancos de dados dos projetos Oute
 
-## Histórico resumido
+Dois stacks isolados no `oute-server`, cada um num **LXC próprio** na `lxdbr0` (padrão da casa: todo projeto é um LXC com Docker dentro):
 
-1. **Inventário inicial**
-   - Listamos todos os containers LXC/LXD que estavam rodando no VPS (`oute‑server`).
-   - Identificamos o container Docker do SurrealDB (`b88aee607449`) que já estava ativo sob o nome **`oute-surrealdb`**.
-   - O usuário solicitou a consolidação de múltiplos projetos (studio, obo, kubo, oute‑agent, hanko, frentes‑engenharia, financial‑control, vaultgarden) em uma única instância SurrealDB.
+| Stack | Repo | Projetos | Motivo |
+|---|---|---|---|
+| **oute-surreal-db** | este | kubo, obo | grafo + vetores + documento no mesmo motor (kubo); FTS + vetores (obo) |
+| **oute-supabase-db** | `renatobardi/oute-supabase-db` | hanko, frentes-engenharia, financial-control | relacional (Postgres), auth, storage, realtime |
 
-2. **Requisitos e decisões**
-   - Utilizar **um único container Docker** chamado **`oute‑surreal‑db`** (renomeado a partir de `oute‑surrealdb`).
-   - Persistência usando **RocksDB** no diretório host **`/srv/oute-db`**.
-   - Porta padrão **8000**, mas validar a disponibilidade.
-   - Cada projeto terá **namespace** próprio e **databases** `dev` e `prod`.
-   - **Token por database** (dev / prod) com permissões completas; todos os segredos são armazenados no VaultGarden, nunca no repositório.
-   - Backup semanal, retenção de **2 dumps (≈ 15 dias)**.
-   - Firewall restrito à rede interna da bridge LXD (`lxdbr0`).
+Fora do escopo: **oute-agent** (SurrealDB próprio, ADR-08: dado derivado, isolado do agente yolo), **vaultwarden** (SQLite, isolado por segurança — cofre não depende de nenhum stack), **studio** (descontinuado).
 
-3. **Script de assessment**
-   - Foi criado o script `oute-assessment.sh` (no Mac) que, via SSH, executa no host Linux:
-     - `lsblk` e `df -hT` para identificar discos e montar `/srv/oute-db`.
-     - Verifica se a porta 8000 está livre.
-     - Obtém o IP da bridge `lxdbr0`.
-     - Checa a existência do diretório de dados.
-   - O script grava um relatório em `/tmp/oute_assessment.txt` no servidor.
+## Decisões (2026-10-18)
 
-4. **Arquivos planejados** (já descritos na conversa)
-   - `docker/docker-compose.yml` – define o serviço `oute-surreal-db` com volume, porta e variáveis de ambiente.
-   - `surreal/init.surrealql` – cria namespaces, databases, scopes e tokens.
-   - Exemplos de conexão para **SvelteKit (TypeScript)** e **Rust** que leem os tokens via variáveis de ambiente.
-   - `scripts/backup_surreal.sh` – exporta cada namespace/database semanalmente e mantém apenas os dois últimos dumps.
-   - `scripts/firewall_surreal.sh` – regras iptables que permitem acesso apenas da rede LXD.
-   - `README.md` (atualizado) com instruções de implantação.
+- **Instância central** de SurrealDB (não embutida por projeto): é o propósito deste repo; novos projetos entram como namespace.
+- **Databases `prd`/`test`**, criadas só onde o ambiente existe (`kubo:prd,test obo:prd`).
+- **Dois usuários por database**: `app_<db>` OWNER (aplicação) e `ro_<db>` VIEWER (backup/leitura).
+- **Pilotos**: kubo-test → kubo-prd → obo (surreal); financial-control → frentes-engenharia → hanko (supabase).
+- **hanko** é app próprio: migra só o Postgres (`HANKO_DATABASE_URL`). Supabase Auth/Storage ficam como opção futura.
+- **Repo oute-supabase-db**: reset para repo próprio só com `docker/` + nossos arquivos, sem amarra ao upstream (reescrita da `master` só com ok explícito).
+- **LXC por stack**, não Docker no host. Isolamento por construção (rede, disco, Docker próprios), sem regras `DOCKER-USER`, sem choque de porta 8000 entre Supabase e SurrealDB, backup via `lxc snapshot`/`export`.
+- **Achado (medido 2026-10-18):** containers Docker do host — inclusive a rede do agente yolo — alcançam IPs de LXC. LXC sozinho não isola do host. Barreira: **ACL do LXD** na NIC do LXC (`ingress` default-drop; só os IPs dos LXCs clientes chegam na 8000), aplicada sem sudo e fora do alcance de quem está dentro do LXC. O script de ops testa o negativo (host Docker e LXC fora da lista devem ser bloqueados). Novo projeto cliente = novo IP na lista. Vale também para os LXCs existentes (fora do escopo).
+- SurrealDB **v3.3.0** por digest, RocksDB, `user 10001`, `mem_limit 2g`, `cpus 1`.
+- Um **namespace por projeto** (hífen → underscore). Senhas no cofre (Vaultwarden).
+- Acesso só pela `lxdbr0` (IP do LXC); dentro do LXC o compose publica `:8000`. Dados em `/srv/oute-surreal-db/data` (10001:10001).
+- Backup: snapshot do LXC. Dump SurrealQL fica pra depois.
+- Migração: `surreal export` na origem → `surreal import` no destino; origem viva até confirmar; rollback = URL antiga.
 
-5. **Resultado do assessment (2026-10-18)**
-   - Host: Ubuntu 24.04 (aarch64, Oracle Cloud), 4 vCPU, 23 GiB RAM.
-   - `/srv` fica no disco raiz (`/dev/sda1`, 17 GiB livres). `/mnt/lxd` (`/dev/sdb`, 115 GiB livres) é o disco do pool LXD.
-   - O `oute-surrealdb` já roda (v3.3.0, RocksDB, `unless-stopped`, healthy) com dados em `/mnt/lxd/oute-data/surrealdb`. O diretório `/srv/oute-db` não existe.
-   - O container não publica portas (só redes Docker). A porta 8000 está livre no host.
-   - `lxdbr0` = `10.173.117.1/24`. Os containers LXC (studio, obo, kubo, hanko, frentes-engenharia, financial-control, vaultwarden) estão em `10.173.117.x`.
-   - O usuário `ubuntu` não tem sudo sem senha: `nft`/`iptables` não puderam ser lidos.
-   - Não há crontab. Os agendamentos usam systemd timers (ex.: `oute-studio-backup.timer`).
-   - `rc-local.service` está com falha (não relacionado a este projeto).
+## O que cada projeto usa do SurrealDB (assessment de código, 2026-10-18)
 
-6. **Decisões revisadas (propostas, a confirmar)**
-   - Reusar `/mnt/lxd/oute-data/surrealdb` no lugar de `/srv/oute-db`: evita migrar dados e tem mais espaço.
-   - Publicar a porta 8000 apenas em `10.173.117.1` (IP da `lxdbr0`). Isso substitui o script de firewall dedicado; ele só volta se quisermos regras adicionais.
-   - Backup semanal via systemd timer (padrão já usado no servidor), e não via cron.
-   - Antes de renomear para `oute-surreal-db`, descobrir quem depende do nome `oute-surrealdb` (provável stack `oute-agent`). Se necessário, manter o nome antigo como alias de rede.
+| Projeto | Hoje | Uso | Migração |
+|---|---|---|---|
+| kubo (kubo-prd .21 / kubo-test .18) | 3.1.5 rocksdb, ns `kubo` db `kubo`, ~270 MB cada | RELATE/grafo, HNSW, SCHEMAFULL, live queries | v3→v3, direta. **Piloto** |
+| obo (obo-prd .30) | 2.6.5 rocksdb, ns `obo` db `obo` | FTS (`search::`), vetores, `DEFINE FUNCTION`, EVENT | v2→v3: export/import + teste do app (SurrealQL v3 tem breaking changes) |
 
-7. **Arquivos criados (nada foi implantado ainda)**
-   - `docker/docker-compose.yml`, `.env.example`
-   - `scripts/init_surreal.sh` (namespaces, databases dev/prod e um usuário por database; substitui o `init.surrealql`)
-   - `scripts/backup_surreal.sh` + `systemd/oute-surreal-backup.{service,timer}` (semanal, mantém 2 dumps)
+Achado: kubo e obo passam a senha root em `--pass` na linha de comando (visível em `docker inspect`). Aqui vai por env var.
 
-8. **Próximos passos (no servidor, nesta ordem)**
-   - Rodar o assessment de novo para descobrir quem depende de `oute-surrealdb` (redes, aliases, labels).
-   - Copiar o repo para `/opt/oute-surreal-db`, criar o `.env` a partir do `.env.example` e preencher `SURREAL_ROOT_PASS`.
-   - Fazer cópia do diretório de dados, parar o container antigo (RocksDB aceita um processo por diretório) e subir o novo.
-   - Rodar `init_surreal.sh` e guardar as senhas no VaultGarden.
-   - Instalar o service/timer do backup.
+## Assessment do servidor (2026-10-18)
 
----
+- Ubuntu 24.04 aarch64 (Oracle), 4 vCPU, 23 GiB RAM (13 disponíveis), sem swap. Docker 29.1.3, LXD pool `oute-pool` em `/mnt/lxd` (115 GiB livres). `sudo` exige senha.
+- `lxdbr0` = `10.173.117.1/24`. LXCs: kubo-prd/test, obo-prd, hanko-prd, frentes-engenharia-prd, financial-control-prd, vaultwarden, uptime-kuma, studio-prd/test (descontinuado).
+- Relatórios completos em `reports/` (ignorado pelo git).
 
-Esta documentação será usada como ponto de partida para os próximos *harnesses* quando necessário.  
-Qualquer alteração ou continuação do processo pode ser feita editando este arquivo ou adicionando novos artefatos ao repositório.
+## Arquivos
+
+- `docker/docker-compose.yml`, `.env.example`, `scripts/init_surreal.sh` (idempotente; `--rotate [projeto]`), `scripts/oute-assessment.sh`, `docs/plano.html`.
+- Firewall de host e unit systemd do desenho anterior foram removidos: o LXC isola por construção.
+
+## Perguntas abertas
+
+Nenhuma. F2: `scripts/ops/f2_create_surreal_lxc.sh` (local, não versionado) pronto; `--check` validado. Aguardando execução.
+
+Risco aberto da F2: se a ACL do LXD não filtrar tráfego mascarado pelo host, o script falha na verificação (exit 2) e a alternativa é regra em `DOCKER-USER` no host (exige sudo).
+
+## Fases
+
+1. **Preparação** (esta branch): assessments, divisão, decisões, docs, compose/init para o LXC. ✔
+2. **LXC oute-surreal-db** (`10.173.117.50`, 2 CPU, 3 GiB, nesting, autostart, snapshots 7d): ACL do LXD, Docker (`docker.io`), repo em `/opt/oute-surreal-db`, `.env` 600, `compose up`, `init_surreal.sh`, senhas no cofre. Verificar: healthy; kubo-test alcança; vaultwarden e containers Docker do host (redes `bridge` e `oute-agent_oute`) bloqueados.
+3. **Piloto kubo-test** → kubo-prd: export/import, apontar app, validar, rollback definido.
+4. **obo**: export v2 → import v3, rodada de testes do app.
+5. **oute-supabase-db**: repo + LXC + pilotos (financial-control → frentes → hanko). Plano próprio naquele repo.
+6. **Backup**: política de snapshots LXC.

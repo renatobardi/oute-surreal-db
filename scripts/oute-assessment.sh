@@ -6,11 +6,11 @@
 #
 # Uso:
 #   ./oute-surreal-db/scripts/oute-assessment.sh
-#   OUTE_HOST=meu-host DATA_DIR=/srv/oute-db DB_PORT=8000 ./oute-surreal-db/scripts/oute-assessment.sh
+#   OUTE_HOST=meu-host DATA_DIR=/mnt/lxd/oute-surreal-db DB_PORT=8000 ./oute-surreal-db/scripts/oute-assessment.sh
 #
 # Variáveis opcionais:
 #   OUTE_HOST   Host SSH (default: oute-server)
-#   DATA_DIR    Diretório de dados do SurrealDB (default: /srv/oute-db)
+#   DATA_DIR    Diretório de dados do SurrealDB (default: /mnt/lxd/oute-surreal-db)
 #   DB_PORT     Porta a validar (default: 8000)
 #   LXD_BRIDGE  Bridge LXD (default: lxdbr0)
 #   REPORT_DIR  Diretório local dos relatórios (default: <repo>/reports)
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 OUTE_HOST="${OUTE_HOST:-oute-server}"
-DATA_DIR="${DATA_DIR:-/srv/oute-db}"
+DATA_DIR="${DATA_DIR:-/mnt/lxd/oute-surreal-db}"
 DB_PORT="${DB_PORT:-8000}"
 LXD_BRIDGE="${LXD_BRIDGE:-lxdbr0}"
 

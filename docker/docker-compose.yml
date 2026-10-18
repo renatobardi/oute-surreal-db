@@ -1,14 +1,17 @@
-# SurrealDB consolidado para todos os projetos Oute.
-# Uso (a partir da raiz do repo):
-#   docker compose --env-file .env -f docker/docker-compose.yml up -d
+# SurrealDB central dos projetos Oute. Roda dentro do LXC oute-surreal-db:
+# rede, disco e Docker próprios — nada compartilhado com outra stack.
 #
-# ATENÇÃO: o RocksDB permite apenas um processo por diretório de dados.
-# Pare o container antigo (oute-surrealdb) antes de subir este.
+# Uso (na raiz do repo, com .env preenchido):
+#   docker compose --env-file .env -f docker/docker-compose.yml up -d
+name: oute-surreal-db
+
 services:
-  oute-surreal-db:
-    image: surrealdb/surrealdb:${SURREAL_VERSION:-v3.3.0}
+  surrealdb:
+    image: ${SURREAL_IMAGE:?defina SURREAL_IMAGE no .env}
     container_name: ${SURREAL_CONTAINER_NAME:-oute-surreal-db}
     restart: unless-stopped
+    # Mesmo uid da imagem (nonroot). O dir de dados precisa pertencer a 10001:10001.
+    user: "10001:10001"
     command:
       - start
       - --no-banner
@@ -20,22 +23,15 @@ services:
     environment:
       SURREAL_USER: ${SURREAL_ROOT_USER:-root}
       SURREAL_PASS: ${SURREAL_ROOT_PASS:?defina SURREAL_ROOT_PASS no .env}
+    mem_limit: ${SURREAL_MEM_LIMIT:-2g}
+    cpus: ${SURREAL_CPUS:-1}
     ports:
-      # Publicado apenas na bridge lxdbr0 (acessível aos containers LXC).
-      - "${SURREAL_BIND_IP:-10.173.117.1}:${SURREAL_PORT:-8000}:8000"
+      - "${SURREAL_PORT:-8000}:8000"
     volumes:
-      - ${SURREAL_DATA_DIR:-/mnt/lxd/oute-data/surrealdb}:/data/surrealdb
+      - ${SURREAL_DATA_DIR:?defina SURREAL_DATA_DIR no .env}:/data/surrealdb
     healthcheck:
-      test: ["CMD", "/surreal", "isready", "--endpoint", "http://localhost:8000"]
-      interval: 30s
+      test: ["CMD", "/surreal", "is-ready", "--endpoint", "http://127.0.0.1:8000"]
+      interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 10s
-    networks:
-      default:
-        aliases:
-          - oute-surrealdb
-
-networks:
-  default:
-    name: oute-surreal-db
+      retries: 6
+      start_period: 20s
