@@ -1,0 +1,10 @@
+# Ruído do macOS
+.DS_Store
+
+# Relatórios de assessment contêm informações da infraestrutura
+reports/
+
+# Segredos nunca vão para o repositório
+.env
+*.env
+!.env.example

@@ -1,0 +1,9 @@
+[Unit]
+Description=Backup do SurrealDB (oute-surreal-db)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Ajuste o caminho para onde o repositório está no servidor.
+ExecStart=/opt/oute-surreal-db/scripts/backup_surreal.sh
