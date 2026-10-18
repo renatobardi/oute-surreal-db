@@ -14,7 +14,7 @@
 
 - Ubuntu 24.04 aarch64 (Oracle), 4 vCPU, 23 GiB RAM, sem swap. Docker 29.1.3, Compose 2.40.3, `ubuntu` usa docker sem sudo; **sudo exige senha**.
 - `/` (sda1) 17 GiB livres; `/mnt/lxd` (sdb) 115 GiB livres, pool LXD `oute-pool`.
-- Porta 8000 livre no host. `lxdbr0` = `10.173.117.1/24`; LXCs: studio-prd/test, obo-prd, kubo-prd/test, hanko-prd, frentes-engenharia-prd, financial-control-prd, vaultwarden, uptime-kuma.
+- Porta 8000 livre no host. `lxdbr0` = `10.173.117.1/24`; LXCs: obo-prd, kubo-prd/test, hanko-prd, frentes-engenharia-prd, financial-control-prd, vaultwarden, uptime-kuma.
 - `oute-surrealdb` existente: v3.3.0 por digest, user 10001, mem 2g, sem porta publicada, rede `oute-agent_studio`, aliases `surrealdb`/`oute-surrealdb`, dados em `/mnt/lxd/oute-data/surrealdb` (109 MB). Log avisa que o root já existia (senha do .env do oute-agent pode não ser a real).
 - Agendamentos do host usam systemd timers; não há crontab.
 
@@ -25,6 +25,10 @@
 - `scripts/firewall_surreal.sh` + `systemd/oute-surreal-firewall.service` — isolamento de rede, persistente
 - `scripts/oute-assessment.sh` — inventário read-only via SSH (relatórios em `reports/`, ignorado)
 - `docs/plano.html` — plano autocontido (escopo, decisões, fases)
+
+## Fora do escopo
+
+- **studio**: descontinuado (2026-10-18). Não migra; LXCs `studio-prd`/`studio-test` seguem no servidor até decisão de desligar.
 
 ## Perguntas abertas
 
@@ -37,5 +41,5 @@
 1. **Preparação** (esta branch): arquivos acima. ✔
 2. **Deploy da instância**: copiar repo para `/opt/oute-surreal-db`, `.env` (600), criar `/mnt/lxd/oute-surreal-db` como 10001:10001, `compose up`, firewall + service, `init_surreal.sh`, senhas no cofre. Verificar: healthy; LXC alcança 10.173.117.1:8000; container do oute-agent **não** alcança.
 3. **Piloto kubo + obo**: export na origem → import em `kubo/prod`, `obo/prod`; apontar app; validar; rollback = voltar a URL antiga.
-4. **Demais projetos**: studio, hanko, frentes-engenharia, financial-control, oute-agent, vaultgarden (se confirmado).
+4. **Demais projetos**: hanko, frentes-engenharia, financial-control, oute-agent, vaultgarden (se confirmado).
 5. **Backup**: a definir.

@@ -64,7 +64,7 @@
 </ul></div>
 <div class="card"><strong>Modelo de dados / acesso</strong>
 <ul>
-<li>1 namespace por projeto (hífen → underscore): <code>studio obo kubo oute_agent hanko frentes_engenharia financial_control vaultgarden</code></li>
+<li>1 namespace por projeto (hífen → underscore): <code>obo kubo oute_agent hanko frentes_engenharia financial_control vaultgarden</code></li>
 <li>Databases <code>dev</code> e <code>prod</code> em cada namespace</li>
 <li>Usuário OWNER por database: <code>app_dev</code>, <code>app_prod</code></li>
 <li>Senhas geradas pelo <code>init_surreal.sh</code>, impressas uma vez, guardadas no cofre</li>
@@ -76,6 +76,7 @@
 <li>Migração do conteúdo dos bancos atuais — fase 3/4, começa por kubo e obo</li>
 <li>Mudanças no repo oute-agent</li>
 <li>Token JWT por database (usamos usuário/senha)</li>
+<li><strong>studio</strong> — projeto descontinuado; não migra</li>
 </ul></div>
 </div>
 
@@ -91,7 +92,6 @@
 
 <rect x="30" y="60" width="250" height="240" rx="8" class="box"/>
 <text x="44" y="82">LXD · lxdbr0 10.173.117.0/24</text>
-<rect x="44" y="96" width="222" height="26" rx="5" class="box"/><text x="54" y="114">studio-prd / test  .38 / .36</text>
 <rect x="44" y="128" width="222" height="26" rx="5" class="box"/><text x="54" y="146">kubo-prd / test  .21 / .18</text>
 <rect x="44" y="160" width="222" height="26" rx="5" class="box"/><text x="54" y="178">obo-prd  .30</text>
 <rect x="44" y="192" width="222" height="26" rx="5" class="box"/><text x="54" y="210">hanko · frentes · financial</text>
@@ -149,7 +149,7 @@
 <p><strong>Verificação:</strong> app funcional no novo banco; origem preservada até confirmação.</p></div>
 
 <div class="ph"><h3>F4 · Demais projetos</h3>
-<p>studio, hanko, frentes-engenharia, financial-control, oute-agent (exige validar a senha root do banco atual e PR no oute-agent), vaultgarden (se confirmado).</p></div>
+<p>hanko, frentes-engenharia, financial-control, oute-agent (exige validar a senha root do banco atual e PR no oute-agent), vaultgarden (se confirmado).</p></div>
 
 <div class="ph"><h3>F5 · Backup</h3>
 <p>A definir: dump local × bucket OCI (padrão já usado pelo <code>oute-studio-backup</code>).</p></div>
