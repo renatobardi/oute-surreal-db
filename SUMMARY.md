@@ -18,7 +18,7 @@ Fora do escopo: **oute-agent** (SurrealDB próprio, ADR-08: dado derivado, isola
 - **hanko** é app próprio: migra só o Postgres (`HANKO_DATABASE_URL`). Supabase Auth/Storage ficam como opção futura.
 - **Repo oute-supabase-db**: reset para repo próprio só com `docker/` + nossos arquivos, sem amarra ao upstream (reescrita da `master` só com ok explícito).
 - **LXC por stack**, não Docker no host. Isolamento por construção (rede, disco, Docker próprios), sem regras `DOCKER-USER`, sem choque de porta 8000 entre Supabase e SurrealDB, backup via `lxc snapshot`/`export`.
-- **Achado (medido 2026-10-18):** containers Docker do host — inclusive a rede do agente yolo — alcançam IPs de LXC. LXC sozinho não isola do host. Barreira: **ACL do LXD** na NIC do LXC (`ingress` default-drop; só os IPs dos LXCs clientes chegam na 8000), aplicada sem sudo e fora do alcance de quem está dentro do LXC. O script de ops testa o negativo (host Docker e LXC fora da lista devem ser bloqueados). Novo projeto cliente = novo IP na lista. Vale também para os LXCs existentes (fora do escopo).
+- **Achado (medido 2026-10-18):** containers Docker do host — inclusive a rede do agente yolo — alcançam IPs de LXC. LXC sozinho não isola do host. ACL do LXD não serve: o LXD 5.21 rejeita `security.acls` em NIC de bridge. Barreira adotada: **firewall nft dentro do LXC** (tabela própria `inet oute_sdb`, hook forward; só os IPs dos LXCs clientes chegam na 8000). O tráfego do Docker do host chega mascarado como `10.173.117.1`, fora da lista. Persistido em `/etc/nftables.conf`. Novo projeto cliente = novo IP na lista (`SURREAL_CLIENT_IPS` no script de ops). Vale também para os LXCs existentes (fora do escopo).
 - SurrealDB **v3.3.0** por digest, RocksDB, `user 10001`, `mem_limit 2g`, `cpus 1`.
 - Um **namespace por projeto** (hífen → underscore). Senhas no cofre (Vaultwarden).
 - Acesso só pela `lxdbr0` (IP do LXC); dentro do LXC o compose publica `:8000`. Dados em `/srv/oute-surreal-db/data` (10001:10001).
@@ -47,14 +47,12 @@ Achado: kubo e obo passam a senha root em `--pass` na linha de comando (visível
 
 ## Perguntas abertas
 
-Nenhuma. F2: `scripts/ops/f2_create_surreal_lxc.sh` (local, não versionado) pronto; `--check` validado. Aguardando execução.
-
-Risco aberto da F2: se a ACL do LXD não filtrar tráfego mascarado pelo host, o script falha na verificação (exit 2) e a alternativa é regra em `DOCKER-USER` no host (exige sudo).
+Nenhuma.
 
 ## Fases
 
 1. **Preparação** (esta branch): assessments, divisão, decisões, docs, compose/init para o LXC. ✔
-2. **LXC oute-surreal-db** (`10.173.117.50`, 2 CPU, 3 GiB, nesting, autostart, snapshots 7d): ACL do LXD, Docker (`docker.io`), repo em `/opt/oute-surreal-db`, `.env` 600, `compose up`, `init_surreal.sh`, senhas no cofre. Verificar: healthy; kubo-test alcança; vaultwarden e containers Docker do host (redes `bridge` e `oute-agent_oute`) bloqueados.
+2. **LXC oute-surreal-db** ✔ (2026-10-18): `10.173.117.50`, 2 CPU, 3 GiB, nesting, autostart, snapshots 7d (snapshot `pos-f2`); nft no LXC, `docker.io`, repo em `/opt/oute-surreal-db`, `.env` 600, compose, init. Verificado, inclusive após reboot do LXC: healthy; kubo-test alcança; vaultwarden e containers Docker do host (`bridge`, `oute-agent_oute`) bloqueados (13 drops no contador). Scripts locais: `scripts/ops/f2_create_surreal_lxc.sh`, `f2b_show_credentials.sh`. Pendente do dono: guardar credenciais no cofre.
 3. **Piloto kubo-test** → kubo-prd: export/import, apontar app, validar, rollback definido.
 4. **obo**: export v2 → import v3, rodada de testes do app.
 5. **oute-supabase-db**: repo + LXC + pilotos (financial-control → frentes → hanko). Plano próprio naquele repo.
