@@ -70,9 +70,8 @@ for entry in ${SURREAL_PROJECTS}; do
   [ "${dbs}" != "${entry}" ] || { echo "ERRO: '${entry}' sem ambientes (use projeto:prd,test)" >&2; exit 1; }
   ns="${project//-/_}"
   for db in ${dbs//,/ }; do
-    sql <<SQL >/dev/null
+    sql --ns "${ns}" --db "${db}" >/dev/null <<SQL
 DEFINE NAMESPACE IF NOT EXISTS ${ns};
-USE NS ${ns};
 DEFINE DATABASE IF NOT EXISTS ${db};
 SQL
     define_user "${ns}" "${db}" "app_${db}" OWNER "${project}"
