@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>oute-surreal-db — Plano</title>
+<title>Bancos Oute — oute-surreal-db & oute-supabase-db</title>
 <style>
-  :root{--bg:#0f1115;--fg:#e6e6e6;--mut:#9aa0a6;--card:#171a21;--line:#2a2f3a;--acc:#7c5cff;--ok:#3ddc84;--warn:#ffb020;--bad:#ff5c5c}
+  :root{--bg:#0f1115;--fg:#e6e6e6;--mut:#9aa0a6;--card:#171a21;--line:#2a2f3a;--acc:#7c5cff;--ok:#3ddc84;--warn:#ffb020;--bad:#ff5c5c;--sb:#3ecf8e;--sr:#ff00a0}
   @media (prefers-color-scheme:light){:root{--bg:#fafafa;--fg:#1b1b1b;--mut:#5f6368;--card:#fff;--line:#e0e0e0}}
   *{box-sizing:border-box}
   body{margin:0;font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
-  main{max-width:1000px;margin:0 auto;padding:32px 20px 80px}
+  main{max-width:1040px;margin:0 auto;padding:32px 20px 80px}
   h1{font-size:28px;margin:0 0 4px}h2{font-size:20px;margin:40px 0 12px;border-bottom:1px solid var(--line);padding-bottom:6px}
   .sub{color:var(--mut);margin:0 0 24px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
@@ -18,7 +18,7 @@
   code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:rgba(127,127,127,.15);padding:1px 5px;border-radius:4px}
   table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mut);font-weight:600}
   .tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--mut)}
-  .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+  .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.sb{color:var(--sb)}.sr{color:var(--sr)}
   .tl{position:relative;margin:16px 0 0 10px;padding-left:26px;border-left:2px solid var(--line)}
   .tl .ph{position:relative;margin:0 0 22px}
   .tl .ph::before{content:"";position:absolute;left:-34px;top:5px;width:14px;height:14px;border-radius:50%;background:var(--card);border:3px solid var(--acc)}
@@ -28,163 +28,146 @@
   svg{width:100%;height:auto;display:block}
   .svg text{font:12px ui-monospace,Menlo,monospace;fill:var(--fg)}
   .svg .box{fill:var(--card);stroke:var(--line);stroke-width:1.5}
-  .svg .hi{stroke:var(--acc);stroke-width:2}
+  .svg .sr{stroke:var(--sr);stroke-width:2}.svg .sb{stroke:var(--sb);stroke-width:2}
   .svg .ln{stroke:var(--mut);stroke-width:1.5;fill:none;marker-end:url(#a)}
-  .svg .blk{stroke:var(--bad);stroke-width:1.5;fill:none;stroke-dasharray:5 4;marker-end:url(#x)}
   .svg .lbl{fill:var(--mut);font-size:11px}
 </style>
 </head>
 <body>
 <main>
-<h1>oute-surreal-db</h1>
-<p class="sub">SurrealDB isolado para os projetos Oute — plano de 2026-10-18 · branch <code>feat/isolated-instance</code></p>
+<h1>Bancos de dados dos projetos Oute</h1>
+<p class="sub">oute-surreal-db &amp; oute-supabase-db · plano de 2026-10-18 · branch <code>feat/isolated-instance</code></p>
 
 <h2>1. Contexto</h2>
 <div class="card">
-<p>Hoje o único SurrealDB do <code>oute-server</code> (<code>oute-surrealdb</code>) pertence ao compose do <strong>oute-agent</strong>: mesma rede, mesmo ciclo de deploy, sem porta publicada. Os demais projetos (LXCs) não têm acesso a ele. O objetivo é ter <strong>uma instância própria, totalmente isolada</strong>, que sirva todos os projetos Oute com separação por namespace — e, depois, trazer para ela o conteúdo dos bancos existentes.</p>
+<p>Cada projeto no <code>oute-server</code> roda num LXC com seu próprio banco embutido: SurrealDB em versões diferentes (2.6.5, 3.1.5), SQLite, Postgres. Nenhum compartilha, nenhum é padronizado, e cada um faz backup do seu jeito (ou não faz). O objetivo é consolidar em <strong>dois stacks isolados</strong>, cada um num LXC próprio, escolhendo o motor pelo que cada app realmente usa — não pelo que já está lá.</p>
 </div>
 
 <h2>2. O que definimos</h2>
 <div class="grid">
-<div class="card"><strong>Instância</strong>
+<div class="card"><strong>Topologia</strong>
 <ul>
-<li>Container <code>oute-surreal-db</code>, SurrealDB v3.3.0 (pinada por digest), RocksDB</li>
-<li>Dados em <code>/mnt/lxd/oute-surreal-db</code> (disco com 115 GiB livres), dono <code>10001:10001</code></li>
-<li>Rede Docker própria <code>oute-surreal-db</code> (bridge <code>br-oute-sdb</code>)</li>
-<li>Limites: <code>mem 2g</code>, <code>cpus 1</code> — sem isso o RocksDB usa ~metade da RAM do host</li>
-<li>Roda como <code>user 10001</code> (nonroot da imagem)</li>
+<li><strong>LXC por stack</strong> na <code>lxdbr0</code>, Docker dentro — mesmo padrão dos outros projetos</li>
+<li>Isolamento por construção: rede, disco e Docker próprios; sem regras <code>DOCKER-USER</code> no host; sem conflito de porta 8000 entre Supabase e SurrealDB</li>
+<li>Backup = <code>lxc snapshot</code> / <code>lxc export</code> (política na F6)</li>
+<li>Acesso só pela rede LXD (<code>10.173.117.0/24</code>)</li>
 </ul></div>
-<div class="card"><strong>Isolamento</strong>
+<div class="card"><strong class="sr">oute-surreal-db</strong> (este repo)
 <ul>
-<li>Não toca no <code>oute-surrealdb</code> do oute-agent: nem rede, nem volume, nem alias, nem senha</li>
-<li>Porta publicada <strong>só</strong> em <code>10.173.117.1:8000</code> (bridge LXD)</li>
-<li>Firewall em <code>DOCKER-USER</code>: aceita só origem <code>10.173.117.0/24</code>; container sem saída para fora</li>
-<li>Sem o firewall, <em>qualquer</em> container Docker do host (incl. o agente "yolo") chegaria no banco</li>
-<li>Regras persistem via <code>oute-surreal-firewall.service</code> (somem no reboot sem ele)</li>
+<li>SurrealDB v3.3.0 por digest, RocksDB, <code>user 10001</code>, <code>mem 2g</code>, <code>cpus 1</code></li>
+<li>Projetos: <strong>kubo</strong>, <strong>obo</strong></li>
+<li>1 namespace por projeto, databases por ambiente, usuário OWNER <code>app_&lt;db&gt;</code> por database; senhas no cofre</li>
+<li>Init idempotente; <code>--rotate [projeto]</code> para trocar senha</li>
 </ul></div>
-<div class="card"><strong>Modelo de dados / acesso</strong>
+<div class="card"><strong class="sb">oute-supabase-db</strong> (repo próprio)
 <ul>
-<li>1 namespace por projeto (hífen → underscore): <code>obo kubo oute_agent hanko frentes_engenharia financial_control vaultgarden</code></li>
-<li>Databases <code>dev</code> e <code>prod</code> em cada namespace</li>
-<li>Usuário OWNER por database: <code>app_dev</code>, <code>app_prod</code></li>
-<li>Senhas geradas pelo <code>init_surreal.sh</code>, impressas uma vez, guardadas no cofre</li>
-<li>Init idempotente: não toca usuário existente; <code>--rotate [projeto]</code> para trocar</li>
+<li>Compose oficial self-hosted: Postgres 17.6, Auth, PostgREST, Realtime, Storage, Edge Functions, Supavisor, Studio</li>
+<li>Projetos: <strong>hanko</strong> (já é Postgres), <strong>frentes-engenharia</strong> e <strong>financial-control</strong> (SQLite → Postgres)</li>
+<li>Plano detalhado vive naquele repo</li>
 </ul></div>
-<div class="card"><strong>Fora do escopo (por ora)</strong>
+<div class="card"><strong>Fora do escopo</strong>
 <ul>
-<li><span class="warn">Backup</span> — adiado; <code>/mnt/lxd</code> não tem backup OCI</li>
-<li>Migração do conteúdo dos bancos atuais — fase 3/4, começa por kubo e obo</li>
-<li>Mudanças no repo oute-agent</li>
-<li>Token JWT por database (usamos usuário/senha)</li>
-<li><strong>studio</strong> — projeto descontinuado; não migra</li>
+<li><strong>oute-agent</strong> — SurrealDB próprio por decisão do ADR-08 (dado derivado, isolado do agente yolo). Revisão só via ADR</li>
+<li><strong>vaultwarden</strong> — SQLite, isolado por segurança: o cofre não pode depender de um stack cujas senhas ele guarda</li>
+<li><strong>studio</strong> — projeto descontinuado</li>
+<li>Dump SurrealQL agendado — depois</li>
 </ul></div>
 </div>
 
-<h2>3. Arquitetura alvo</h2>
+<h2>3. Por que cada projeto vai para onde vai</h2>
+<table>
+<tr><th>Projeto</th><th>Hoje</th><th>O que usa de verdade</th><th>Destino</th><th>Razão</th></tr>
+<tr><td>kubo</td><td>SurrealDB 3.1.5</td><td>RELATE/grafo (131 travessias), HNSW, SCHEMAFULL, live</td><td class="sr">surreal</td><td>Grafo + vetor + documento num motor só. Em Postgres seria CTE recursiva ou AGE: possível, feio</td></tr>
+<tr><td>obo</td><td>SurrealDB 2.6.5</td><td>FTS <code>search::</code>, vetores, 12 <code>DEFINE FUNCTION</code></td><td class="sr">surreal</td><td>Empate técnico com pgvector+tsvector. Fica por custo de reescrita; é o mais portável</td></tr>
+<tr><td>hanko</td><td>Postgres 17</td><td>relacional</td><td class="sb">supabase</td><td>Só trocar <code>DATABASE_URL</code></td></tr>
+<tr><td>frentes-engenharia</td><td>SQLite ×2 (123 MB)</td><td>relacional</td><td class="sb">supabase</td><td>Relacional → relacional; muda driver</td></tr>
+<tr><td>financial-control</td><td>SQLite (1,4 MB)</td><td>relacional</td><td class="sb">supabase</td><td>Idem; menor — piloto</td></tr>
+<tr><td>oute-agent</td><td>SurrealDB 3.3.0</td><td>estado derivado, quase sem SurrealQL</td><td>fora</td><td>ADR-08: isolado do agente yolo, remontável do DuckDB</td></tr>
+<tr><td>vaultwarden</td><td>SQLite</td><td>terceiros</td><td>fora</td><td>Cofre isolado; dependência circular se for pro Supabase</td></tr>
+<tr><td>studio</td><td>SurrealDB 2.6.5</td><td>—</td><td>fora</td><td>Descontinuado</td></tr>
+</table>
+
+<h2>4. Arquitetura alvo</h2>
 <div class="card svg">
-<svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg">
-<defs>
-<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#9aa0a6"/></marker>
-<marker id="x" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#ff5c5c"/></marker>
-</defs>
-<rect x="10" y="10" width="880" height="310" rx="10" class="box"/>
-<text x="24" y="32">oute-server (Ubuntu 24.04, aarch64)</text>
+<svg viewBox="0 0 900 360" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#9aa0a6"/></marker></defs>
+<rect x="10" y="10" width="880" height="340" rx="10" class="box"/>
+<text x="24" y="32">oute-server · LXD · lxdbr0 10.173.117.0/24</text>
 
-<rect x="30" y="60" width="250" height="240" rx="8" class="box"/>
-<text x="44" y="82">LXD · lxdbr0 10.173.117.0/24</text>
-<rect x="44" y="128" width="222" height="26" rx="5" class="box"/><text x="54" y="146">kubo-prd / test  .21 / .18</text>
-<rect x="44" y="160" width="222" height="26" rx="5" class="box"/><text x="54" y="178">obo-prd  .30</text>
-<rect x="44" y="192" width="222" height="26" rx="5" class="box"/><text x="54" y="210">hanko · frentes · financial</text>
-<rect x="44" y="224" width="222" height="26" rx="5" class="box"/><text x="54" y="242">vaultwarden · uptime-kuma</text>
-<text x="44" y="288" class="lbl">consumidores (só estes chegam)</text>
+<rect x="30" y="60" width="200" height="270" rx="8" class="box"/>
+<text x="44" y="82">consumidores (LXCs)</text>
+<rect x="44" y="96" width="172" height="26" rx="5" class="box"/><text x="54" y="114">kubo-prd / kubo-test</text>
+<rect x="44" y="128" width="172" height="26" rx="5" class="box"/><text x="54" y="146">obo-prd</text>
+<rect x="44" y="176" width="172" height="26" rx="5" class="box"/><text x="54" y="194">hanko-prd</text>
+<rect x="44" y="208" width="172" height="26" rx="5" class="box"/><text x="54" y="226">frentes-engenharia-prd</text>
+<rect x="44" y="240" width="172" height="26" rx="5" class="box"/><text x="54" y="258">financial-control-prd</text>
 
-<rect x="330" y="60" width="240" height="150" rx="8" class="box hi"/>
-<text x="344" y="82">rede oute-surreal-db</text>
-<text x="344" y="98" class="lbl">bridge br-oute-sdb</text>
-<rect x="344" y="110" width="212" height="84" rx="6" class="box"/>
-<text x="356" y="130">oute-surreal-db</text>
-<text x="356" y="148" class="lbl">surrealdb v3.3.0 · rocksdb</text>
-<text x="356" y="164" class="lbl">user 10001 · mem 2g · cpus 1</text>
-<text x="356" y="180" class="lbl">/mnt/lxd/oute-surreal-db</text>
+<rect x="300" y="60" width="260" height="120" rx="8" class="box sr"/>
+<text x="314" y="82">LXC oute-surreal-db</text>
+<text x="314" y="100" class="lbl">docker: surrealdb v3.3.0 · rocksdb</text>
+<text x="314" y="116" class="lbl">ns kubo · ns obo</text>
+<text x="314" y="132" class="lbl">user 10001 · mem 2g · cpus 1</text>
+<text x="314" y="160" class="lbl">:8000 só no eth0 do LXC</text>
 
-<rect x="330" y="226" width="240" height="40" rx="6" class="box"/>
-<text x="344" y="243">publish 10.173.117.1:8000</text>
-<text x="344" y="258" class="lbl">+ DOCKER-USER: só 10.173.117.0/24</text>
+<rect x="300" y="210" width="260" height="120" rx="8" class="box sb"/>
+<text x="314" y="232">LXC oute-supabase-db</text>
+<text x="314" y="250" class="lbl">docker: postgres 17.6 · auth · rest</text>
+<text x="314" y="266" class="lbl">realtime · storage · functions · studio</text>
+<text x="314" y="282" class="lbl">supavisor :5432/:6543 · api :8000</text>
+<text x="314" y="310" class="lbl">só no eth0 do LXC</text>
 
-<rect x="620" y="60" width="250" height="240" rx="8" class="box"/>
-<text x="634" y="82">stack oute-agent (intocada)</text>
-<rect x="634" y="96" width="222" height="26" rx="5" class="box"/><text x="644" y="114">oute-agent (yolo)</text>
-<rect x="634" y="128" width="222" height="26" rx="5" class="box"/><text x="644" y="146">oute-agent-studio</text>
-<rect x="634" y="160" width="222" height="26" rx="5" class="box"/><text x="644" y="178">oute-surrealdb (rede studio)</text>
-<rect x="634" y="192" width="222" height="26" rx="5" class="box"/><text x="644" y="210">otel · ai-memory · llm-proxy</text>
-<text x="634" y="288" class="lbl">conteúdo migra na fase 4</text>
+<rect x="640" y="60" width="230" height="270" rx="8" class="box"/>
+<text x="654" y="82">fora do escopo</text>
+<rect x="654" y="96" width="202" height="40" rx="5" class="box"/><text x="664" y="112">oute-agent (host docker)</text><text x="664" y="128" class="lbl">SurrealDB próprio · ADR-08</text>
+<rect x="654" y="146" width="202" height="40" rx="5" class="box"/><text x="664" y="162">vaultwarden (LXC)</text><text x="664" y="178" class="lbl">SQLite · cofre isolado</text>
+<rect x="654" y="196" width="202" height="40" rx="5" class="box"/><text x="664" y="212">studio-prd / test</text><text x="664" y="228" class="lbl">descontinuado</text>
 
-<path d="M280 150 C 310 150, 310 246, 330 246" class="ln"/>
-<text x="286" y="138" class="lbl">tcp 8000</text>
-<path d="M620 110 C 600 110, 600 246, 572 246" class="blk"/>
-<text x="578" y="98" class="lbl bad" fill="#ff5c5c">DROP</text>
+<path d="M216 109 C 260 109, 260 120, 300 120" class="ln"/>
+<path d="M216 141 C 260 141, 260 120, 300 120" class="ln"/>
+<path d="M216 189 C 260 189, 260 270, 300 270" class="ln"/>
+<path d="M216 221 C 260 221, 260 270, 300 270" class="ln"/>
+<path d="M216 253 C 260 253, 260 270, 300 270" class="ln"/>
 </svg>
 </div>
 
-<h2>4. Fases e atividades</h2>
+<h2>5. Fases</h2>
 <div class="tl">
 <div class="ph done"><h3>F1 · Preparação <span class="tag">esta branch</span></h3>
-<p>Assessment do servidor; revisão do plano; compose, <code>.env.example</code>, init idempotente, firewall + service, este documento.</p>
-<p><strong>Verificação:</strong> PR revisado; nada implantado.</p></div>
-
-<div class="ph next"><h3>F2 · Deploy da instância</h3>
-<ul>
-<li>Script de ops: copiar repo → <code>/opt/oute-surreal-db</code>; criar <code>.env</code> (600) com <code>SURREAL_ROOT_PASS</code>; criar dir de dados como 10001:10001</li>
-<li><code>compose up</code>; instalar e habilitar <code>oute-surreal-firewall.service</code> (sudo com senha)</li>
-<li><code>init_surreal.sh</code>; senhas → cofre</li>
-</ul>
-<p><strong>Verificação:</strong> container healthy · de um LXC <code>curl 10.173.117.1:8000/health</code> responde · de um container Docker do host <strong>não</strong> responde · reboot mantém regras.</p></div>
-
-<div class="ph"><h3>F3 · Piloto de migração: kubo e obo</h3>
-<ul>
-<li>Descobrir onde cada um guarda dados hoje e o método de export</li>
-<li>Importar em <code>kubo/prod</code> e <code>obo/prod</code>; apontar app com <code>app_prod</code></li>
-<li>Rollback = voltar a URL/credencial antiga</li>
-</ul>
-<p><strong>Verificação:</strong> app funcional no novo banco; origem preservada até confirmação.</p></div>
-
-<div class="ph"><h3>F4 · Demais projetos</h3>
-<p>hanko, frentes-engenharia, financial-control, oute-agent (exige validar a senha root do banco atual e PR no oute-agent), vaultgarden (se confirmado).</p></div>
-
-<div class="ph"><h3>F5 · Backup</h3>
-<p>A definir: dump local × bucket OCI (padrão já usado pelo <code>oute-studio-backup</code>).</p></div>
+<p>Assessment do servidor e do código dos projetos; divisão por motor; decisão LXC; este documento. <span class="warn">Pendente:</span> ajustar compose para o LXC (sai o firewall do host).</p></div>
+<div class="ph next"><h3>F2 · LXC oute-surreal-db</h3>
+<ul><li><code>lxc launch</code> no perfil padrão (Docker dentro), repo em <code>/opt/oute-surreal-db</code>, <code>.env</code> 600</li>
+<li><code>compose up</code>; <code>init_surreal.sh</code>; senhas → cofre</li></ul>
+<p><strong>Verificação:</strong> healthy · de kubo-test <code>curl http://&lt;ip&gt;:8000/health</code> ok · nada publicado no host.</p></div>
+<div class="ph"><h3>F3 · Piloto kubo-test → kubo-prd</h3>
+<p><code>surreal export</code> na origem → <code>import</code> no destino; apontar app; validar; rollback = URL antiga. Origem viva até confirmar.</p></div>
+<div class="ph"><h3>F4 · obo</h3>
+<p>Export v2 → import v3; rodada de testes do app (SurrealQL v3 tem breaking changes).</p></div>
+<div class="ph"><h3>F5 · oute-supabase-db</h3>
+<p>Repo + LXC + pilotos: financial-control → frentes-engenharia → hanko. Plano próprio naquele repo.</p></div>
+<div class="ph"><h3>F6 · Backup</h3>
+<p>Política de snapshots LXC para os dois stacks.</p></div>
 </div>
 
-<h2>5. Riscos e mitigação</h2>
+<h2>6. Riscos</h2>
 <table>
 <tr><th>Risco</th><th>Mitigação</th></tr>
-<tr><td>Containers Docker do host alcançam o banco via <code>10.173.117.1</code></td><td>Firewall <code>DOCKER-USER</code> obrigatório + teste negativo na F2</td></tr>
-<tr><td>Regras de firewall somem no reboot</td><td><code>oute-surreal-firewall.service</code> (oneshot, após docker)</td></tr>
-<tr><td>RocksDB sem limite consome a RAM do host</td><td><code>mem_limit 2g</code></td></tr>
-<tr><td>Dir de dados com dono errado → container não escreve</td><td>Ops cria dir como 10001:10001; compose roda com o mesmo uid</td></tr>
-<tr><td>Re-executar init troca senhas e derruba apps</td><td>Init idempotente; rotação só com <code>--rotate</code> explícito</td></tr>
-<tr><td>Perda do disco <code>/mnt/lxd</code> = perda total</td><td class="warn">Aceito por ora (F5)</td></tr>
-<tr><td>Apontar por engano para o dir do oute-agent (2 processos no mesmo RocksDB)</td><td><code>SURREAL_DATA_DIR</code> obrigatório no .env, caminho distinto documentado</td></tr>
+<tr><td>obo v2 → v3: SurrealQL com breaking changes</td><td>Rodada de testes do app antes de apontar prd; origem viva até confirmar</td></tr>
+<tr><td>Dois projetos num processo SurrealDB (kubo + obo)</td><td>Namespaces separados, usuários por database, limites de recurso; alternativa (cada um com o seu) ainda em aberto</td></tr>
+<tr><td>RocksDB sem limite consome a RAM do LXC/host</td><td><code>mem_limit 2g</code></td></tr>
+<tr><td>Re-executar init troca senhas e derruba apps</td><td>Init idempotente; rotação só com <code>--rotate</code></td></tr>
+<tr><td>Senha root na linha de comando (como kubo/obo fazem hoje)</td><td>Aqui vai por env var</td></tr>
+<tr><td>Sem backup até a F6</td><td class="warn">Aceito por ora; snapshot manual do LXC antes de cada migração</td></tr>
 </table>
 
-<h2>6. Perguntas abertas</h2>
-<div class="card"><ul>
-<li><strong>vaultgarden</strong>: o LXC é <code>vaultwarden</code> (Bitwarden-compatível; usa SQLite/Postgres, não SurrealDB). Se for ele, sai da lista. Se for projeto próprio, fica.</li>
-<li>Senha root do <code>oute-surrealdb</code> atual: o log diz que o root já existia; a do <code>.env</code> do oute-agent pode não valer. Confirmar antes da F4.</li>
-<li>Onde kubo e obo guardam dados hoje (dentro dos LXCs? qual engine?).</li>
-</ul></div>
-
-<h2>7. Arquivos do repositório</h2>
-<table>
-<tr><th>Arquivo</th><th>Papel</th></tr>
-<tr><td><code>docker/docker-compose.yml</code></td><td>Serviço, rede própria, limites, healthcheck, porta na lxdbr0</td></tr>
-<tr><td><code>.env.example</code></td><td>Variáveis; copiar para <code>.env</code> (ignorado)</td></tr>
-<tr><td><code>scripts/init_surreal.sh</code></td><td>Namespaces, databases, usuários; idempotente; <code>--rotate</code></td></tr>
-<tr><td><code>scripts/firewall_surreal.sh</code></td><td>Regras DOCKER-USER; idempotente; <code>--remove</code></td></tr>
-<tr><td><code>systemd/oute-surreal-firewall.service</code></td><td>Persistência das regras</td></tr>
-<tr><td><code>scripts/oute-assessment.sh</code></td><td>Inventário read-only via SSH; relatórios em <code>reports/</code> (ignorado)</td></tr>
-<tr><td><code>SUMMARY.md</code></td><td>Memória do projeto para próximas sessões</td></tr>
-</table>
+<h2>7. Perguntas abertas</h2>
+<div class="card"><ol>
+<li>Central SurrealDB só para kubo+obo vale, ou cada um segue com o seu embutido (só padronizando versão)?</li>
+<li>hanko é o teamhanko (passkeys) ou app próprio? Se teamhanko, Supabase Auth pode substituí-lo.</li>
+<li>Repo oute-supabase-db: reset para só <code>docker/</code> + nossos arquivos, ou sparse-checkout do fork?</li>
+<li>Nome das databases: <code>prd</code>/<code>test</code> (espelha LXCs) ou <code>prod</code>/<code>dev</code>?</li>
+<li>Usuário read-only por database (kubo usa <code>kubo_ro</code>): criar?</li>
+<li>Pilotos: kubo-test (surreal) e financial-control (supabase)?</li>
+</ol></div>
 </main>
 </body>
 </html>
