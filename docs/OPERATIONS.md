@@ -93,7 +93,11 @@ Método: `surreal export` na origem → `surreal import` no destino. A **origem 
 6. Só depois de confirmado, desligar a origem (decisão do dono).
 
 Ordem: **kubo-test → kubo-prd → obo**. kubo é v3.1.5 → v3.3.0 (direto). obo é v2.6.5 → v3.3.0 (breaking changes de SurrealQL: testar o app antes de apontar prd).
-> Este procedimento ainda não foi exercitado; ao fim do piloto kubo-test, **atualize esta seção com o que de fato funcionou**.
+**O que a F3 ensinou (2026-10-19, kubo-test, 143 MB):**
+- O export por `/export` é rápido (4 s) e pode ser **enviado por pipe entre LXCs sem passar por disco do host**.
+- **No RocksDB do central o import travou** (v3.3.0 e v3.1.5): servidor a 0% CPU, health check estoura, precisa `docker restart`, sobra import parcial (recupere com `lxc restore` de um snapshot tirado antes). Com `surrealkv` o mesmo dump entrou em 31 s sem falhas e com contagens idênticas. **Não migre dados enquanto a decisão de engine estiver pendente** (`SUMMARY.md`).
+- Ordem que funcionou: schema (sem índices) → `INSERT` normais → `INSERT RELATION` → `DEFINE INDEX`, **um statement por request** em `POST /import` (com `OPTION IMPORT;` na frente). Valide com contagem por tabela origem × destino e, se houver HNSW, uma busca KNN.
+- O app precisa autenticar no nível certo: apps com credencial ROOT (kubo hoje) não cabem no central (ROOT enxerga todos os namespaces).
 
 ## 9. Recriar/atualizar o LXC (idempotente)
 
@@ -119,6 +123,8 @@ Ubuntu 24.04 aarch64 (Oracle Cloud), 4 vCPU, 23 GiB RAM, sem swap; LXD 5.21.8 LT
 | Script remoto "morre" no meio | `lxc exec` consumiu o stdin; use `</dev/null` |
 | `There was a problem with authentication` com `app_`/`ro_` | falta `--auth-level database` (usuários são de database) |
 | `onnxruntime cpuid_info warning` | ruído inofensivo do SurrealDB; ignore |
+| Import trava / servidor a 0% CPU / health `unhealthy` | Carga em massa no RocksDB (ver seção 8). `docker restart` e `lxc restore` do snapshot pré-import |
+| Script remoto com `pkill -f nome` mata o próprio shell | O padrão aparece na linha de comando do próprio shell; use `pgrep -f "[n]ome"` em comando separado |
 | `DEFINE USER` não troca senha | por desenho o init mantém existentes; use `--rotate` |
 | Container Docker do host "alcança" LXCs vizinhos | verdade para os **outros** LXCs (fora do escopo); este está protegido pelo nft |
 | `.env.example` mudou e nada aconteceu no LXC | o `.env` do LXC não é sobrescrito; edite-o (seção 4) |

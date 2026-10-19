@@ -23,7 +23,7 @@ Critério de entrada: o app usa de fato recursos que SurrealDB faz bem (grafo, v
 - **LXC `oute-surreal-db`** no `oute-server` (Ubuntu 24.04 aarch64, LXD 5.21, pool `oute-pool` em `/mnt/lxd`), na `lxdbr0` (`10.173.117.0/24`).
 - Padrão da casa: todo projeto é um LXC com Docker dentro. Config do LXC: IP fixo `10.173.117.50`, 2 CPU, 3 GiB, `security.nesting=true`, `boot.autostart=true`, `snapshots.expiry=7d`.
 - Dentro do LXC: `docker.io` + compose v2 (`dns 1.1.1.1`), repo em `/opt/oute-surreal-db`, dados em `/srv/oute-surreal-db/data` (dono `10001:10001`).
-- Container `oute-surreal-db`: SurrealDB **v3.3.0 fixado por digest**, RocksDB, `user 10001`, `mem_limit 2g`, `cpus 1`, porta `8000`, healthcheck `surreal is-ready`.
+- Container `oute-surreal-db`: SurrealDB **v3.3.0 fixado por digest**, RocksDB (**engine em reavaliação**: trava na carga em massa dos dados do kubo; `surrealkv` carregou sem falhas — ver `SUMMARY.md`, Achados da F3), `user 10001`, `mem_limit 2g`, `cpus 1`, porta `8000`, healthcheck `surreal is-ready`.
 - Nada é compartilhado com outro stack: rede, disco, Docker e container próprios. O `oute-surrealdb` do oute-agent não é tocado.
 
 ## Isolamento de rede
@@ -45,7 +45,7 @@ Clientes autorizados hoje: `10.173.117.21` (kubo-prd), `10.173.117.18` (kubo-tes
 |---|---|
 | Namespace | nome do projeto; hífen vira underscore (`oute-agent` → `oute_agent`) |
 | Database | `prd` e `test` (espelha os sufixos dos LXCs). **Só se cria o que existe** (obo não tem `test`) |
-| Usuários | por database: `app_<db>` **OWNER** (a aplicação) e `ro_<db>` **VIEWER** (backup, leitura, agentes que só leem). `root` só para ops |
+| Usuários | por database: `app_<db>` **OWNER** (a aplicação) e `ro_<db>` **VIEWER** (backup, leitura, agentes que só leem). `root` só para ops. *Em avaliação (F3): terceiro `rw_<db>` **EDITOR** para apps que separam escrita de DDL, como o kubo* |
 | Nível de auth | usuários são **de database**: no CLI use `--auth-level database`; nos SDKs, signin com namespace + database + usuário |
 | Cofre (Vaultwarden) | `oute-surreal-db/root` e `oute-surreal-db/<ns>/<db>/<usuário>` |
 | Env vars nos apps | padrão a adotar na migração de cada app: `SURREAL_URL`, `SURREAL_NS`, `SURREAL_DB`, `SURREAL_USER`, `SURREAL_PASS` (hoje divergem: `NAMESPACE`/`DATABASE`/`PASSWORD` no obo) |
@@ -68,7 +68,7 @@ Clientes autorizados hoje: `10.173.117.21` (kubo-prd), `10.173.117.18` (kubo-tes
 |---|---|
 | F1 Preparação (assessments, desenho, docs) | feito |
 | F2 LXC + instância + isolamento | feito 2026-10-18 (snapshot `pos-f2`) |
-| F3 Piloto kubo-test → kubo-prd | próxima |
+| F3 Piloto kubo-test → kubo-prd | investigada; bloqueada por decisões de engine e de auth (ver `SUMMARY.md`) |
 | F4 obo (v2 → v3, exige teste do app) | |
 | F5 oute-supabase-db | repo próprio |
 | F6 Backup | a definir |
@@ -80,6 +80,8 @@ Clientes autorizados hoje: `10.173.117.21` (kubo-prd), `10.173.117.18` (kubo-tes
 | obo está em SurrealDB 2.6.5; v3 tem breaking changes de SurrealQL | Export/import + rodada de testes do app antes de apontar prd; origem fica viva |
 | Vários projetos num processo | Namespaces e usuários separados, limites de CPU/RAM; decisão consciente |
 | RocksDB sem limite consome a RAM | `mem_limit 2g` |
+| RocksDB trava na carga em massa (v3.1.5 e v3.3.0) | Decisão de engine pendente; `surrealkv` passou no mesmo dump. Não migrar dados até decidir |
+| kubo usa credenciais ROOT-level; no central ROOT enxerga todos os namespaces | Usuários de database + signin com ns/db no kubo; `rw_<db>` EDITOR |
 | Re-executar init trocaria senhas | Init idempotente; rotação só com `--rotate` |
 | Allowlist de IPs exige manutenção | Ver runbook "Adicionar projeto cliente" |
 | Sem backup real até a F6 | Snapshot manual antes de cada migração; snapshots expiram em 7 dias |

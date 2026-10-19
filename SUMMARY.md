@@ -54,7 +54,19 @@ Nenhuma.
 
 1. **Preparação** (esta branch): assessments, divisão, decisões, docs, compose/init para o LXC. ✔
 2. **LXC oute-surreal-db** ✔ (2026-10-18): `10.173.117.50`, 2 CPU, 3 GiB, nesting, autostart, snapshots 7d (snapshot `pos-f2`); nft no LXC, `docker.io`, repo em `/opt/oute-surreal-db`, `.env` 600, compose, init. Verificado, inclusive após reboot do LXC: healthy; kubo-test alcança; vaultwarden e containers Docker do host (`bridge`, `oute-agent_oute`) bloqueados (13 drops no contador). Scripts versionados em `ops/` (`provision_lxc.sh`, `rotate_and_show_credentials.sh`). Pendente do dono: guardar credenciais no cofre.
-3. **Piloto kubo-test** → kubo-prd: export/import, apontar app, validar, rollback definido.
+3. **Piloto kubo-test** — *investigado em 2026-10-19; bloqueado por 2 decisões (ver "Achados da F3")*. Nada foi migrado: o central está como na F2 (snapshots `pos-f2`, `pre-f3-kubo-test`); kubo-test não foi alterado (só leitura via `/export`).
 4. **obo**: export v2 → import v3, rodada de testes do app.
 5. **oute-supabase-db**: repo + LXC + pilotos (financial-control → frentes → hanko). Plano próprio naquele repo.
 6. **Backup**: política de snapshots LXC.
+
+## Achados da F3 (2026-10-19)
+
+1. **RocksDB trava na carga em massa do dump do kubo-test (143 MB, 55 tabelas, 94.899 registros).** Reproduzido várias vezes em v3.3.0 e também numa instância temporária v3.1.5: o servidor para a 0% de CPU, o health check estoura e só reinicia com `docker restart`; sobra import parcial. Descartado por teste: memória (sem OOM, ~550 MiB de 2 GiB), CPU (2 CPUs igual), tamanho de statement (INSERTs de 12 MB passam), conteúdo/ID do registro (o registro "culpado" entra isolado em 37 ms, com schema completo e sem dados), ordem das arestas. Depende do estado acumulado de escrita. Config observada do RocksDB com `cpus 1`/`mem 2g`: 1 thread de background, 2 jobs, *memory manager* de 144 MiB, blobs ≥ 4 KB separados.
+2. **Com engine `surrealkv` (v3.3.0) o mesmo dump importa em 31 s, 0 falhas**, com os 32 índices (incluindo HNSW de 768 dim). Contagem por tabela idêntica à origem (55 tabelas, 94.899 registros, 0 divergências) e busca KNN no HNSW funciona. Ordem usada: schema (sem índices) → `INSERT` normais → `INSERT RELATION` → `DEFINE INDEX`, **um statement por request** em `/import`.
+3. **Modelo de auth do kubo não cabe no nosso modelo (usuários de database).** `kubo/store/client.py:124` faz `signin({"username","password"})` (root-level) e usa 3 credenciais **ROOT-level**: `root`, `kubo_rw` (EDITOR, escrita da UI) e `kubo_ro` (VIEWER). No central, usuário ROOT enxerga todos os namespaces (inclusive obo). Para migrar é preciso usuários de database (signin com `namespace`+`database`: mudança de 1 linha no kubo) e um **terceiro usuário `rw_<db>` (EDITOR)**, que nosso `init_surreal.sh` ainda não cria.
+
+## Decisões pendentes (bloqueiam F3)
+
+- **Engine do central**: manter RocksDB (e achar outra forma de carregar dados) ou trocar para `surrealkv`? Trocar exige novo diretório de dados e reexecutar o init (senhas novas; o central está vazio).
+- **Auth do kubo**: aceitar a mudança de signin no kubo e criar `rw_<db>` EDITOR no padrão do central?
+- Reportar o travamento do RocksDB ao SurrealDB (exige repro sintético, sem dados reais)?
