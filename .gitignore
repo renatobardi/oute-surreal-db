@@ -9,5 +9,3 @@ reports/
 *.env
 !.env.example
 
-# Scripts de ops manual (execução local, não versionados)
-scripts/ops/

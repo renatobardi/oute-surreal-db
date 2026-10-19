@@ -42,7 +42,8 @@ Achado: kubo e obo passam a senha root em `--pass` na linha de comando (visível
 
 ## Arquivos
 
-- `docker/docker-compose.yml`, `.env.example`, `scripts/init_surreal.sh` (idempotente; `--rotate [projeto]`), `scripts/oute-assessment.sh`, `docs/plano.html`.
+- **Fonte da verdade**: `README.md` (índice), `docs/DESIGN.md` (desenho e decisões), `docs/OPERATIONS.md` (runbooks).
+- `docker/docker-compose.yml`, `.env.example`, `scripts/init_surreal.sh` (idempotente; `--rotate [projeto]`), `scripts/oute-assessment.sh`, `ops/provision_lxc.sh`, `ops/rotate_and_show_credentials.sh`, `docs/plano.html`.
 - Firewall de host e unit systemd do desenho anterior foram removidos: o LXC isola por construção.
 
 ## Perguntas abertas
@@ -52,7 +53,7 @@ Nenhuma.
 ## Fases
 
 1. **Preparação** (esta branch): assessments, divisão, decisões, docs, compose/init para o LXC. ✔
-2. **LXC oute-surreal-db** ✔ (2026-10-18): `10.173.117.50`, 2 CPU, 3 GiB, nesting, autostart, snapshots 7d (snapshot `pos-f2`); nft no LXC, `docker.io`, repo em `/opt/oute-surreal-db`, `.env` 600, compose, init. Verificado, inclusive após reboot do LXC: healthy; kubo-test alcança; vaultwarden e containers Docker do host (`bridge`, `oute-agent_oute`) bloqueados (13 drops no contador). Scripts locais: `scripts/ops/f2_create_surreal_lxc.sh`, `f2b_show_credentials.sh`. Pendente do dono: guardar credenciais no cofre.
+2. **LXC oute-surreal-db** ✔ (2026-10-18): `10.173.117.50`, 2 CPU, 3 GiB, nesting, autostart, snapshots 7d (snapshot `pos-f2`); nft no LXC, `docker.io`, repo em `/opt/oute-surreal-db`, `.env` 600, compose, init. Verificado, inclusive após reboot do LXC: healthy; kubo-test alcança; vaultwarden e containers Docker do host (`bridge`, `oute-agent_oute`) bloqueados (13 drops no contador). Scripts versionados em `ops/` (`provision_lxc.sh`, `rotate_and_show_credentials.sh`). Pendente do dono: guardar credenciais no cofre.
 3. **Piloto kubo-test** → kubo-prd: export/import, apontar app, validar, rollback definido.
 4. **obo**: export v2 → import v3, rodada de testes do app.
 5. **oute-supabase-db**: repo + LXC + pilotos (financial-control → frentes → hanko). Plano próprio naquele repo.

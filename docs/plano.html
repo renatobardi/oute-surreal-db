@@ -36,7 +36,7 @@
 <body>
 <main>
 <h1>Bancos de dados dos projetos Oute</h1>
-<p class="sub">oute-surreal-db &amp; oute-supabase-db · plano de 2026-10-18 · branch <code>feat/isolated-instance</code></p>
+<p class="sub">Fonte da verdade: <code>README.md</code>, <code>docs/DESIGN.md</code>, <code>docs/OPERATIONS.md</code> · oute-surreal-db &amp; oute-supabase-db · plano de 2026-10-18 · branch <code>feat/isolated-instance</code></p>
 
 <h2>1. Contexto</h2>
 <div class="card">
@@ -141,7 +141,7 @@
 <div class="ph done"><h3>F2 · LXC oute-surreal-db <span class="tag">feito 2026-10-18</span></h3>
 <ul><li><code>lxc launch</code> no perfil padrão (Docker dentro), repo em <code>/opt/oute-surreal-db</code>, <code>.env</code> 600</li>
 <li><code>compose up</code>; <code>init_surreal.sh</code>; senhas → cofre</li></ul>
-<p><strong>Verificado (também após reboot do LXC):</strong> healthy · kubo-test alcança · vaultwarden e containers Docker do host (<code>bridge</code>, <code>oute-agent_oute</code>) bloqueados. Script: <code>scripts/ops/f2_create_surreal_lxc.sh</code> (<code>--check</code> valida só as pré-condições). LXC <code>10.173.117.50</code>, 2 CPU, 3 GiB.</p></div>
+<p><strong>Verificado (também após reboot do LXC):</strong> healthy · kubo-test alcança · vaultwarden e containers Docker do host (<code>bridge</code>, <code>oute-agent_oute</code>) bloqueados. Script: <code>ops/provision_lxc.sh</code> (<code>--check</code> valida só as pré-condições). LXC <code>10.173.117.50</code>, 2 CPU, 3 GiB.</p></div>
 <div class="ph next"><h3>F3 · Piloto kubo-test → kubo-prd</h3>
 <p><code>surreal export</code> na origem → <code>import</code> no destino; apontar app; validar; rollback = URL antiga. Origem viva até confirmar.</p></div>
 <div class="ph"><h3>F4 · obo</h3>
