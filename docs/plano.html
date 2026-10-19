@@ -49,7 +49,7 @@
 <ul>
 <li><strong>LXC por stack</strong> na <code>lxdbr0</code>, Docker dentro — mesmo padrão dos outros projetos</li>
 <li>Rede, disco e Docker próprios; sem conflito de porta 8000 entre Supabase e SurrealDB</li>
-<li><strong class="warn">Medido:</strong> containers Docker do host (inclusive a rede do agente yolo) alcançam IPs de LXC. Barreira: <strong>ACL do LXD</strong> na NIC (ingress default-drop; só os LXCs clientes na :8000), sem sudo e fora do alcance de quem está dentro do LXC. O script de ops <em>testa o bloqueio</em></li>
+<li><strong class="warn">Medido:</strong> containers Docker do host (inclusive a rede do agente yolo) alcançam IPs de LXC. O LXD 5.21 não aceita ACL em NIC de bridge; barreira: <strong>firewall nft dentro do LXC</strong> (só os LXCs clientes na :8000; o Docker do host chega mascarado como o IP da lxdbr0). Sem sudo. O script de ops <em>testa o bloqueio</em></li>
 <li>Backup = <code>lxc snapshot</code> / <code>lxc export</code> (política na F6)</li>
 <li>Acesso só pela rede LXD (<code>10.173.117.0/24</code>)</li>
 </ul></div>
@@ -136,13 +136,13 @@
 
 <h2>5. Fases</h2>
 <div class="tl">
-<div class="ph done"><h3>F1 · Preparação <span class="tag">esta branch</span></h3>
+<div class="ph done"><h3>F1 · Preparação</h3>
 <p>Assessment do servidor e do código dos projetos; divisão por motor; decisão LXC; compose e init para o LXC; este documento.</p></div>
-<div class="ph next"><h3>F2 · LXC oute-surreal-db</h3>
+<div class="ph done"><h3>F2 · LXC oute-surreal-db <span class="tag">feito 2026-10-18</span></h3>
 <ul><li><code>lxc launch</code> no perfil padrão (Docker dentro), repo em <code>/opt/oute-surreal-db</code>, <code>.env</code> 600</li>
 <li><code>compose up</code>; <code>init_surreal.sh</code>; senhas → cofre</li></ul>
-<p><strong>Verificação (automática no script):</strong> healthy · kubo-test alcança · vaultwarden e containers Docker do host (<code>bridge</code>, <code>oute-agent_oute</code>) bloqueados. Script: <code>scripts/ops/f2_create_surreal_lxc.sh</code> (<code>--check</code> valida só as pré-condições). LXC <code>10.173.117.50</code>, 2 CPU, 3 GiB.</p></div>
-<div class="ph"><h3>F3 · Piloto kubo-test → kubo-prd</h3>
+<p><strong>Verificado (também após reboot do LXC):</strong> healthy · kubo-test alcança · vaultwarden e containers Docker do host (<code>bridge</code>, <code>oute-agent_oute</code>) bloqueados. Script: <code>scripts/ops/f2_create_surreal_lxc.sh</code> (<code>--check</code> valida só as pré-condições). LXC <code>10.173.117.50</code>, 2 CPU, 3 GiB.</p></div>
+<div class="ph next"><h3>F3 · Piloto kubo-test → kubo-prd</h3>
 <p><code>surreal export</code> na origem → <code>import</code> no destino; apontar app; validar; rollback = URL antiga. Origem viva até confirmar.</p></div>
 <div class="ph"><h3>F4 · obo</h3>
 <p>Export v2 → import v3; rodada de testes do app (SurrealQL v3 tem breaking changes).</p></div>
@@ -160,7 +160,7 @@
 <tr><td>RocksDB sem limite consome a RAM do LXC/host</td><td><code>mem_limit 2g</code></td></tr>
 <tr><td>Re-executar init troca senhas e derruba apps</td><td>Init idempotente; rotação só com <code>--rotate</code></td></tr>
 <tr><td>Senha root na linha de comando (como kubo/obo fazem hoje)</td><td>Aqui vai por env var</td></tr>
-<tr><td>ACL do LXD pode não filtrar tráfego mascarado pelo host</td><td>Script verifica o negativo e falha (exit 2); alternativa: regra <code>DOCKER-USER</code> no host (exige sudo)</td></tr>
+<tr><td>Allowlist de IPs no firewall do LXC exige manutenção</td><td>Novo projeto cliente = novo IP em <code>SURREAL_CLIENT_IPS</code>; script reaplica e testa o negativo</td></tr>
 <tr><td>Sem backup até a F6</td><td class="warn">Aceito por ora; snapshot manual do LXC antes de cada migração</td></tr>
 </table>
 
