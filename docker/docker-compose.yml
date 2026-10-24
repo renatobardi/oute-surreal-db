@@ -10,6 +10,7 @@ services:
     image: ${SURREAL_IMAGE:?defina SURREAL_IMAGE no .env}
     container_name: ${SURREAL_CONTAINER_NAME:-oute-surreal-db}
     restart: unless-stopped
+    # Engine surrealkv: o RocksDB travou na carga em massa dos dados do kubo (ver SUMMARY.md, Achados da F3).
     # Mesmo uid da imagem (nonroot). O dir de dados precisa pertencer a 10001:10001.
     user: "10001:10001"
     command:
@@ -19,7 +20,7 @@ services:
       - info
       - --bind
       - 0.0.0.0:8000
-      - rocksdb:///data/surrealdb
+      - surrealkv:///data/surrealdb
     environment:
       SURREAL_USER: ${SURREAL_ROOT_USER:-root}
       SURREAL_PASS: ${SURREAL_ROOT_PASS:?defina SURREAL_ROOT_PASS no .env}

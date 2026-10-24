@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # init_surreal.sh
-# Para cada projeto:ambientes em SURREAL_PROJECTS cria namespace, databases e dois usuários por database:
-#   app_<db>  ROLES OWNER   (a aplicação)
+# Para cada projeto:ambientes em SURREAL_PROJECTS cria namespace, databases e três usuários por database:
+#   app_<db>  ROLES OWNER   (a aplicação: DDL/migrations + dados)
+#   rw_<db>   ROLES EDITOR  (lê/escreve dados e schema, mas NÃO gerencia usuários/acessos: caminho de escrita da UI)
 #   ro_<db>   ROLES VIEWER  (backup, consultas, leitura)
 # Idempotente: usuários existentes NÃO são tocados. Para gerar senhas novas use --rotate [projeto...].
 # Senhas são impressas UMA vez; guarde no cofre. Nada é salvo em disco.
@@ -75,6 +76,7 @@ DEFINE NAMESPACE IF NOT EXISTS ${ns};
 DEFINE DATABASE IF NOT EXISTS ${db};
 SQL
     define_user "${ns}" "${db}" "app_${db}" OWNER "${project}"
+    define_user "${ns}" "${db}" "rw_${db}" EDITOR "${project}"
     define_user "${ns}" "${db}" "ro_${db}" VIEWER "${project}"
   done
 done

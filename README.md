@@ -20,10 +20,12 @@ Se algo no servidor diverge do que está aqui, o servidor está errado (ou este 
 | `docker/docker-compose.yml` | Serviço SurrealDB (roda **dentro** do LXC) |
 | `.env.example` | Variáveis; o `.env` real vive só no LXC (600, nunca no git) |
 | `scripts/init_surreal.sh` | Cria namespaces/databases/usuários (idempotente, `--rotate`). Roda **dentro** do LXC |
+| `scripts/import_dump.py` | Importa um dump `.surql` em ordem (schema → dados → arestas → índices); ignora `DEFINE USER`, recusa `UPDATE`. Roda **dentro** do LXC |
+| `tests/` | `init_surreal.test.sh` e `test_import_dump*.py` (unitários + integração contra SurrealDB real em Docker). Rodar: `./tests/init_surreal.test.sh` e `python3 -m unittest discover -s tests -p 'test_*.py'` |
 | `scripts/oute-assessment.sh` | Inventário read-only do servidor via SSH (relatórios em `reports/`, ignorado) |
 | `ops/provision_lxc.sh` | Roda **no Mac**: cria/atualiza o LXC, firewall, Docker, repo, compose, init e **verifica o isolamento**. `--check` só confere pré-condições |
 | `ops/rotate_and_show_credentials.sh` | Roda **no Mac**: gera senhas novas e mostra tudo no seu terminal |
 
 ## Em uma linha
 
-`ws://10.173.117.50:8000/rpc` · SurrealDB v3.3.0 · só kubo-prd, kubo-test e obo-prd alcançam · senhas no Vaultwarden.
+`ws://10.173.117.50:8000/rpc` · SurrealDB v3.3.0 (`surrealkv`) · só kubo-prd, kubo-test e obo-prd alcançam · senhas no Vaultwarden.
