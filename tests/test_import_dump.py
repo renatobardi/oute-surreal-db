@@ -124,5 +124,41 @@ class MakeBatches(unittest.TestCase):
         self.assertEqual(imp.make_batches([], 100), [])
 
 
+class MainPathValidation(unittest.TestCase):
+    """O caminho do dump vem da linha de comando: só aceita arquivo .surql existente."""
+
+    def run_main(self, path):
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            code = imp.main([str(path), "ns", "db", "--dry-run"])
+        return code, err.getvalue()
+
+    def test_rejects_file_without_surql_extension(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = pathlib.Path(tmp) / "passwd.txt"
+            bad.write_text("DEFINE TABLE t;")
+            code, err = self.run_main(bad)
+        self.assertEqual(code, 2)
+        self.assertIn(".surql", err)
+
+    def test_rejects_directory_and_missing_path(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            as_dir = pathlib.Path(tmp) / "dump.surql"
+            as_dir.mkdir()
+            self.assertEqual(self.run_main(as_dir)[0], 2)
+            self.assertEqual(self.run_main(pathlib.Path(tmp) / "nao-existe.surql")[0], 2)
+
+    def test_accepts_regular_surql_file(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ok = pathlib.Path(tmp) / "dump.surql"
+            ok.write_text("DEFINE TABLE t;")
+            self.assertEqual(self.run_main(ok)[0], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

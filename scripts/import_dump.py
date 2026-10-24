@@ -146,8 +146,12 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true", help="só mostra o plano; não conecta")
     args = parser.parse_args(argv)
 
+    dump_path = os.path.realpath(args.dump)
+    if not dump_path.endswith(".surql") or not os.path.isfile(dump_path):
+        print("ERRO: o dump deve ser um arquivo .surql existente: %s" % args.dump, file=sys.stderr)
+        return 2
     try:
-        with open(args.dump, encoding="utf-8") as fh:
+        with open(dump_path, encoding="utf-8") as fh:
             statements = split_statements(fh.read())
         plan, warnings = make_plan(statements)
     except (OSError, ValueError) as exc:
