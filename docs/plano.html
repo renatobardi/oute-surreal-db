@@ -55,10 +55,10 @@
 </ul></div>
 <div class="card"><strong class="sr">oute-surreal-db</strong> (este repo)
 <ul>
-<li>SurrealDB v3.3.0 por digest, RocksDB, <code>user 10001</code>, <code>mem 2g</code>, <code>cpus 1</code></li>
+<li>SurrealDB v3.3.0 por digest, engine <code>surrealkv</code> (o RocksDB travou na carga em massa), <code>user 10001</code>, <code>mem 2g</code>, <code>cpus 1</code></li>
 <li>Projetos: <strong>kubo</strong>, <strong>obo</strong></li>
 <li>1 namespace por projeto; databases <code>prd</code>/<code>test</code> só onde o ambiente existe (<code>kubo:prd,test obo:prd</code>)</li>
-<li>Por database: <code>app_&lt;db&gt;</code> OWNER (app) e <code>ro_&lt;db&gt;</code> VIEWER (backup/leitura); senhas no cofre</li>
+<li>Por database: <code>app_&lt;db&gt;</code> OWNER (app), <code>rw_&lt;db&gt;</code> EDITOR (escrita sem gerenciar usuários) e <code>ro_&lt;db&gt;</code> VIEWER (backup/leitura); senhas no cofre</li>
 <li>Central por propósito: novos projetos entram como namespace</li>
 <li>Init idempotente; <code>--rotate [projeto]</code> para trocar senha</li>
 </ul></div>
@@ -108,7 +108,7 @@
 
 <rect x="300" y="60" width="260" height="120" rx="8" class="box sr"/>
 <text x="314" y="82">LXC oute-surreal-db</text>
-<text x="314" y="100" class="lbl">docker: surrealdb v3.3.0 · rocksdb</text>
+<text x="314" y="100" class="lbl">docker: surrealdb v3.3.0 · surrealkv</text>
 <text x="314" y="116" class="lbl">ns kubo · ns obo</text>
 <text x="314" y="132" class="lbl">user 10001 · mem 2g · cpus 1</text>
 <text x="314" y="160" class="lbl">:8000 só no eth0 do LXC</text>
@@ -142,8 +142,8 @@
 <ul><li><code>lxc launch</code> no perfil padrão (Docker dentro), repo em <code>/opt/oute-surreal-db</code>, <code>.env</code> 600</li>
 <li><code>compose up</code>; <code>init_surreal.sh</code>; senhas → cofre</li></ul>
 <p><strong>Verificado (também após reboot do LXC):</strong> healthy · kubo-test alcança · vaultwarden e containers Docker do host (<code>bridge</code>, <code>oute-agent_oute</code>) bloqueados. Script: <code>ops/provision_lxc.sh</code> (<code>--check</code> valida só as pré-condições). LXC <code>10.173.117.50</code>, 2 CPU, 3 GiB.</p></div>
-<div class="ph next"><h3>F3 · Piloto kubo-test → kubo-prd</h3>
-<p><code>surreal export</code> na origem → <code>import</code> no destino; apontar app; validar; rollback = URL antiga. Origem viva até confirmar.</p></div>
+<div class="ph next"><h3>F3 · Piloto kubo-test → kubo-prd <span class="tag">em andamento</span></h3>
+<p>Dados do kubo-test já importados no central (<code>scripts/import_dump.py</code>): 55 tabelas, 96.066 registros, 0 divergências, 28 s. Falta o signin do kubo (usuários de database) e a validação com o app; origem viva até confirmar; rollback = URL antiga.</p></div>
 <div class="ph"><h3>F4 · obo</h3>
 <p>Export v2 → import v3; rodada de testes do app (SurrealQL v3 tem breaking changes).</p></div>
 <div class="ph"><h3>F5 · oute-supabase-db</h3>
@@ -157,7 +157,7 @@
 <tr><th>Risco</th><th>Mitigação</th></tr>
 <tr><td>obo v2 → v3: SurrealQL com breaking changes</td><td>Rodada de testes do app antes de apontar prd; origem viva até confirmar</td></tr>
 <tr><td>Vários projetos num processo SurrealDB</td><td>Namespaces separados, usuários por database, limites de recurso; decisão consciente — central é o propósito</td></tr>
-<tr><td>RocksDB sem limite consome a RAM do LXC/host</td><td><code>mem_limit 2g</code></td></tr>
+<tr><td>Container sem limite consome a RAM do LXC/host</td><td><code>mem_limit 2g</code></td></tr>
 <tr><td>Re-executar init troca senhas e derruba apps</td><td>Init idempotente; rotação só com <code>--rotate</code></td></tr>
 <tr><td>Senha root na linha de comando (como kubo/obo fazem hoje)</td><td>Aqui vai por env var</td></tr>
 <tr><td>Allowlist de IPs no firewall do LXC exige manutenção</td><td>Novo projeto cliente = novo IP em <code>SURREAL_CLIENT_IPS</code>; script reaplica e testa o negativo</td></tr>
@@ -171,7 +171,7 @@
 <tr><td>hanko</td><td><strong>App próprio</strong> — migra só o Postgres</td></tr>
 <tr><td>Repo oute-supabase-db</td><td><strong>Reset</strong> — repo próprio, só <code>docker/</code> + nossos arquivos</td></tr>
 <tr><td>Databases</td><td><strong><code>prd</code>/<code>test</code></strong>, só onde o ambiente existe</td></tr>
-<tr><td>Usuário read-only</td><td><strong>Sim</strong> — <code>ro_&lt;db&gt;</code> VIEWER</td></tr>
+<tr><td>Usuários por database</td><td><strong>Três</strong> — <code>app_</code> OWNER, <code>rw_</code> EDITOR, <code>ro_</code> VIEWER</td></tr>
 <tr><td>Pilotos</td><td><strong>kubo-test → kubo-prd → obo</strong> · <strong>financial-control → frentes → hanko</strong></td></tr>
 </table>
 </main>

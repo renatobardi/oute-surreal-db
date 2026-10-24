@@ -54,7 +54,7 @@ Nenhuma.
 
 1. **Preparação** (esta branch): assessments, divisão, decisões, docs, compose/init para o LXC. ✔
 2. **LXC oute-surreal-db** ✔ (2026-10-18): `10.173.117.50`, 2 CPU, 3 GiB, nesting, autostart, snapshots 7d (snapshot `pos-f2`); nft no LXC, `docker.io`, repo em `/opt/oute-surreal-db`, `.env` 600, compose, init. Verificado, inclusive após reboot do LXC: healthy; kubo-test alcança; vaultwarden e containers Docker do host (`bridge`, `oute-agent_oute`) bloqueados (13 drops no contador). Scripts versionados em `ops/` (`provision_lxc.sh`, `rotate_and_show_credentials.sh`). Pendente do dono: guardar credenciais no cofre.
-3. **Piloto kubo-test** — *investigado em 2026-10-19; bloqueado por 2 decisões (ver "Achados da F3")*. Nada foi migrado: o central está como na F2 (snapshots `pos-f2`, `pre-f3-kubo-test`); kubo-test não foi alterado (só leitura via `/export`).
+3. **Piloto kubo-test** — *em andamento*: dados já importados no central (ver "Estado da F3"); falta o signin do kubo e a validação com o app.
 4. **obo**: export v2 → import v3, rodada de testes do app.
 5. **oute-supabase-db**: repo + LXC + pilotos (financial-control → frentes → hanko). Plano próprio naquele repo.
 6. **Backup**: política de snapshots LXC.
@@ -65,8 +65,22 @@ Nenhuma.
 2. **Com engine `surrealkv` (v3.3.0) o mesmo dump importa em 31 s, 0 falhas**, com os 32 índices (incluindo HNSW de 768 dim). Contagem por tabela idêntica à origem (55 tabelas, 94.899 registros, 0 divergências) e busca KNN no HNSW funciona. Ordem usada: schema (sem índices) → `INSERT` normais → `INSERT RELATION` → `DEFINE INDEX`, **um statement por request** em `/import`.
 3. **Modelo de auth do kubo não cabe no nosso modelo (usuários de database).** `kubo/store/client.py:124` faz `signin({"username","password"})` (root-level) e usa 3 credenciais **ROOT-level**: `root`, `kubo_rw` (EDITOR, escrita da UI) e `kubo_ro` (VIEWER). No central, usuário ROOT enxerga todos os namespaces (inclusive obo). Para migrar é preciso usuários de database (signin com `namespace`+`database`: mudança de 1 linha no kubo) e um **terceiro usuário `rw_<db>` (EDITOR)**, que nosso `init_surreal.sh` ainda não cria.
 
-## Decisões pendentes (bloqueiam F3)
+## Decisões tomadas após a F3 (2026-10-24)
 
-- **Engine do central**: manter RocksDB (e achar outra forma de carregar dados) ou trocar para `surrealkv`? Trocar exige novo diretório de dados e reexecutar o init (senhas novas; o central está vazio).
-- **Auth do kubo**: aceitar a mudança de signin no kubo e criar `rw_<db>` EDITOR no padrão do central?
-- Reportar o travamento do RocksDB ao SurrealDB (exige repro sintético, sem dados reais)?
+- **Engine do central: `surrealkv`** (v3.3.0). Instância recriada; o RocksDB antigo (vazio, só usuários da F2) foi removido; snapshots `pre-surrealkv` e `pos-f3-kubo-test-import` guardam os estados.
+- **Auth: usuários de database com três papéis** por database: `app_` OWNER, `rw_` EDITOR, `ro_` VIEWER. O kubo precisa mudar o signin (PR no repo do kubo). Nota: EDITOR **pode** fazer `DEFINE TABLE`; o que ele não pode é gerenciar usuários/acessos.
+- **Reportar o travamento do RocksDB ao SurrealDB**: depois (não bloqueia).
+
+## Estado da F3 (2026-10-24)
+
+- Feito: instância em `surrealkv`; `init` com `rw_`; `scripts/import_dump.py` (testado); import real do kubo-test em `kubo/test` do central — **55 tabelas, 96.066 registros, 0 divergências, KNN do HNSW ok, 28 s**. A origem (kubo-test) segue intacta e é a que serve o app.
+- Falta: mudar o signin do kubo (PR), apontar o kubo-test para o central com `app_test`/`rw_test`/`ro_test`, validar por alguns dias com a origem viva, depois kubo-prd.
+- As credenciais atuais do central foram **recriadas** na troca de engine: rodar `./ops/rotate_and_show_credentials.sh` e guardar no cofre (as antigas deixaram de existir).
+
+## Preview do obo (v2.6.5 → v3.3.0), com export v2 sintético
+
+- O export v2.6.5 tem o mesmo formato do v3 (`INSERT`, `INSERT RELATION`), com `DEFINE FUNCTION` multi-linha: dados, strings difíceis e funções importam.
+- **A sintaxe de índice do v2 é rejeitada pelo v3** (`SEARCH ANALYZER … BM25(…) DOC_IDS_ORDER …`): a ferramenta para com o erro do servidor (exit 1).
+- **MTREE e o operador KNN `<|k|>` não existem mais no v3**: é preciso HNSW e `<|k,EF|>` (muda schema e queries do obo).
+- Arestas v2 trazem um campo lixo `__: true`, que o v3 grava como campo.
+- Conclusão: migrar o obo exige **adaptar schema de índices e queries**, não só export/import. Planejar como trabalho do obo na F4.

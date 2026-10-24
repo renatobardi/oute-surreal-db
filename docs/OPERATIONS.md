@@ -18,7 +18,7 @@ ssh oute-server 'lxc exec oute-surreal-db -- docker logs --tail 50 oute-surreal-
 ## 2. Conectar uma aplicação
 
 - Endpoint: `ws://10.173.117.50:8000/rpc` (SDK) ou `http://10.173.117.50:8000`.
-- Usuário: `app_<db>` (OWNER) para a aplicação; `ro_<db>` para leitura/backup.
+- Usuários por database: `app_<db>` (OWNER: DDL/migrations e dados), `rw_<db>` (EDITOR: dados e schema, **não** gerencia usuários/acessos; caminho de escrita da UI) e `ro_<db>` (VIEWER: leitura/backup).
 - Os usuários são **de database**: no SDK faça signin com `namespace`, `database`, `username`, `password`; no CLI use `--auth-level database`.
 - Env vars (padrão a adotar em cada app ao migrar): `SURREAL_URL`, `SURREAL_NS`, `SURREAL_DB`, `SURREAL_USER`, `SURREAL_PASS`.
 - Senhas vêm do Vaultwarden (`oute-surreal-db/<ns>/<db>/<usuário>`). Nunca em argumento de linha de comando nem no git.
@@ -80,24 +80,25 @@ ssh oute-server 'lxc restore oute-surreal-db antes-de-X'        # volta o LXC IN
 
 ## 8. Migrar os dados de um projeto para cá
 
-Método: `surreal export` na origem → `surreal import` no destino. A **origem fica viva** até a confirmação; rollback = voltar as env vars do app para a origem.
+Método: export na origem → `scripts/import_dump.py` no destino. A **origem fica viva** até a confirmação; rollback = voltar as env vars do app para a origem.
 
-1. Snapshot do LXC destino (seção 6) e, se possível, cópia do dado de origem.
-2. Exportar da origem (no LXC do projeto, container SurrealDB dele), com o usuário root **de lá**:
-   `docker exec <container> /surreal export --endpoint http://127.0.0.1:8000 --user root --pass "$SENHA" --ns <ns> --db <db> /tmp/dump.surql`
-   (passe a senha por variável de ambiente, não digitada em histórico compartilhado).
-3. Importar no destino, no database novo (`prd`/`test`; o nome muda se a origem era `<projeto>/<projeto>`):
-   `surreal import --endpoint http://10.173.117.50:8000 --user root --pass "$SENHA" --ns <ns> --db <prd|test> dump.surql`
-4. Conferir contagens por tabela, índices/HNSW/analyzers e `DEFINE FUNCTION` (obo).
-5. Apontar o app (ou um ambiente de teste dele) para o destino com `app_<db>`; validar fluxos reais.
-6. Só depois de confirmado, desligar a origem (decisão do dono).
+1. Snapshot do LXC destino (seção 6).
+2. Exportar da origem **por pipe, sem passar por disco do host**, para um arquivo temporário dentro do LXC do central (exemplo kubo, usando o sidecar de backup dele, que já tem as credenciais):
+   ```sh
+   ssh oute-server 'lxc exec kubo-test -- docker exec kubo-backup-1 sh -c '"'"'AUTH=$(printf "%s:%s" "$SURREAL_USER" "$SURREAL_PASS" | base64 | tr -d "\n"); wget -q -O - --header="Authorization: Basic $AUTH" --header="surreal-ns: $SURREAL_NS" --header="surreal-db: $SURREAL_DB" http://surrealdb:8000/export'"'"' </dev/null | lxc exec oute-surreal-db -- sh -c "cat > /root/dump.surql"'
+   ```
+3. Importar no database novo (`prd`/`test`; o nome muda se a origem era `<projeto>/<projeto>`), de dentro do LXC do central:
+   ```sh
+   ssh oute-server 'lxc exec oute-surreal-db -- sh -c "cd /opt/oute-surreal-db && set -a && . ./.env && set +a && SURREAL_ENDPOINT=http://127.0.0.1:8000 SURREAL_PASS=\"\$SURREAL_ROOT_PASS\" python3 scripts/import_dump.py /root/dump.surql <ns> <db>"' </dev/null
+   ```
+   `--dry-run` mostra só o plano. A ferramenta envia schema → dados → arestas → índices em lotes, **ignora `DEFINE USER/ACCESS` do dump**, recusa `UPDATE` (no v3 não cria registro) e aborta antes de enviar se houver statement desconhecido.
+4. **Conferir sempre**: o `/import` responde `[]` no sucesso e o `OPTION IMPORT` desliga coerção de tipo e `ENFORCED`, então "sem erro" não prova nada. Compare contagem por tabela origem × destino, índices e `DEFINE FUNCTION`; se houver HNSW, rode uma busca KNN.
+5. Apagar o dump do LXC (`rm /root/dump.surql`): é dado sensível.
+6. Apontar o app (ou um ambiente de teste dele) para o destino com `app_<db>`/`rw_<db>`/`ro_<db>`; validar fluxos reais.
+7. Só depois de confirmado, desligar a origem (decisão do dono).
 
-Ordem: **kubo-test → kubo-prd → obo**. kubo é v3.1.5 → v3.3.0 (direto). obo é v2.6.5 → v3.3.0 (breaking changes de SurrealQL: testar o app antes de apontar prd).
-**O que a F3 ensinou (2026-10-19, kubo-test, 143 MB):**
-- O export por `/export` é rápido (4 s) e pode ser **enviado por pipe entre LXCs sem passar por disco do host**.
-- **No RocksDB do central o import travou** (v3.3.0 e v3.1.5): servidor a 0% CPU, health check estoura, precisa `docker restart`, sobra import parcial (recupere com `lxc restore` de um snapshot tirado antes). Com `surrealkv` o mesmo dump entrou em 31 s sem falhas e com contagens idênticas. **Não migre dados enquanto a decisão de engine estiver pendente** (`SUMMARY.md`).
-- Ordem que funcionou: schema (sem índices) → `INSERT` normais → `INSERT RELATION` → `DEFINE INDEX`, **um statement por request** em `POST /import` (com `OPTION IMPORT;` na frente). Valide com contagem por tabela origem × destino e, se houver HNSW, uma busca KNN.
-- O app precisa autenticar no nível certo: apps com credencial ROOT (kubo hoje) não cabem no central (ROOT enxerga todos os namespaces).
+Resultado medido (kubo-test, 2026-10-24): 55 tabelas, 96.066 registros, 0 divergências, import em 28 s no `surrealkv`.
+Ordem: **kubo-test → kubo-prd → obo**. kubo: v3.1.5 → v3.3.0, direto. **obo: v2.6.5 → v3.3.0 não é só export/import**: o v3 rejeita a sintaxe de índice do v2 (`SEARCH ANALYZER … BM25(…) DOC_IDS_ORDER …`), removeu MTREE e o operador KNN `<|k|>` (use HNSW e `<|k,EF|>`), e as arestas v2 trazem um campo `__: true` que vira lixo. Adapte schema e queries do obo antes.
 
 ## 9. Recriar/atualizar o LXC (idempotente)
 
@@ -114,7 +115,16 @@ Ordem: **kubo-test → kubo-prd → obo**. kubo é v3.1.5 → v3.3.0 (direto). o
 
 Ubuntu 24.04 aarch64 (Oracle Cloud), 4 vCPU, 23 GiB RAM, sem swap; LXD 5.21.8 LTS; pool `oute-pool` (`/mnt/lxd`, dir). `sudo` exige senha (nenhum runbook precisa dele). O assessment read-only é `./scripts/oute-assessment.sh` (relatórios em `reports/`, ignorado pelo git).
 
-## 11. Armadilhas conhecidas
+## 11. Trocar o engine do central (procedimento usado em 2026-10-24: RocksDB → surrealkv)
+
+Só com o central **vazio** ou com backup/export dos dados (um engine novo começa sem nada).
+1. `lxc snapshot oute-surreal-db pre-<engine>`.
+2. No LXC: `docker compose ... down`; mover (não apagar) o diretório de dados: `mv /srv/oute-surreal-db/data /srv/oute-surreal-db/data-<engine-antigo>` e recriar `data` com dono `10001:10001`.
+3. Ajustar o engine em `docker/docker-compose.yml` (URL do storage), commitar, `./ops/provision_lxc.sh` (recria o container e roda o init).
+4. O init cria **usuários novos com senhas novas**: rode `./ops/rotate_and_show_credentials.sh` e guarde no cofre.
+5. Reimportar os dados (seção 8) e conferir. Depois de validar, apagar o diretório antigo.
+
+## 12. Armadilhas conhecidas
 
 | Sintoma | Causa / ação |
 |---|---|
@@ -123,8 +133,10 @@ Ubuntu 24.04 aarch64 (Oracle Cloud), 4 vCPU, 23 GiB RAM, sem swap; LXD 5.21.8 LT
 | Script remoto "morre" no meio | `lxc exec` consumiu o stdin; use `</dev/null` |
 | `There was a problem with authentication` com `app_`/`ro_` | falta `--auth-level database` (usuários são de database) |
 | `onnxruntime cpuid_info warning` | ruído inofensivo do SurrealDB; ignore |
-| Import trava / servidor a 0% CPU / health `unhealthy` | Carga em massa no RocksDB (ver seção 8). `docker restart` e `lxc restore` do snapshot pré-import |
+| Import trava / servidor a 0% CPU / health `unhealthy` | Era o RocksDB na carga em massa (agora o engine é `surrealkv`). `docker restart` e `lxc restore` do snapshot pré-import |
 | Script remoto com `pkill -f nome` mata o próprio shell | O padrão aparece na linha de comando do próprio shell; use `pgrep -f "[n]ome"` em comando separado |
+| `/import` diz OK mas faltam dados / dado com tipo errado | `OPTION IMPORT` desliga validação e o sucesso volta `[]`; confira contagens. `UPDATE` no v3 não cria registro (use `UPSERT`; a ferramenta recusa `UPDATE`) |
+| EDITOR consegue `DEFINE TABLE` | É o comportamento do papel: ele só não gerencia usuários/acessos. Use OWNER só onde precisa de DDL de usuários |
 | `DEFINE USER` não troca senha | por desenho o init mantém existentes; use `--rotate` |
 | Container Docker do host "alcança" LXCs vizinhos | verdade para os **outros** LXCs (fora do escopo); este está protegido pelo nft |
 | `.env.example` mudou e nada aconteceu no LXC | o `.env` do LXC não é sobrescrito; edite-o (seção 4) |
