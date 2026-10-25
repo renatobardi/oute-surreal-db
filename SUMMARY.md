@@ -76,16 +76,25 @@ Nenhuma.
 - **kubo-test roda no central desde 2026-10-24.** Código com signin de database (kubo #256), overlay `compose.central.yml` (kubo #258), imagem do CI por digest (`sha256:4c83…9a42`), deploy **manual** (ver abaixo). Validado: 3 credenciais (`app_test`/`rw_test`/`ro_test`) autenticam, migrations reconhecem o banco importado (`applied=[]`), digest-guard e health-guard OK, UI responde (`/login` 200, `/healthz` 200), 0 erros nos logs, e uma escrita pelo caminho `rw_test` aparece no central e **não** no banco local.
 - Dados importados duas vezes, a segunda com os escritores parados: 55 tabelas, 96.066 registros, 0 divergências, KNN do HNSW ok.
 - **O banco local do kubo-test (`kubo-surrealdb-1`) e o sidecar de backup seguem rodando, sem uso.** A partir de agora o local está desatualizado em relação ao central. Rollback (`.env.pre-central` + `--profile local-db`, ou `lxc restore kubo-test pre-central`) perde o que for escrito no central depois da troca. Desligar o banco local depois do período de validação.
-- Snapshots: kubo-test `pre-cd-redeploy`, `pre-central`; central `pre-kubo-test-reimport` (expiram em 7 dias).
+- Rollback: `~/.env.pre-central` no kubo-test + `docker compose --profile local-db up -d`, ou `lxc restore`. Snapshots: kubo-test `pre-cd-redeploy`, `pre-central`; central `pre-kubo-test-reimport` (expiram em 7 dias).
 - Falta: período de validação com o app real, depois kubo-prd (mesmo procedimento, database `prd`).
 
-### Pendências abertas (não bloqueiam o kubo-test)
+### CD do kubo reparado (2026-10-24) e pendências
 
-1. **CD do kubo quebrado, duas camadas.** (a) o auth key do Tailscale `kubo-cd-dev` expirou em 23/10: já renovado em `TS_AUTHKEY_DEV`; (b) o nó do kubo-test saiu da tailnet (`NeedsLogin`) e o secret `KUBO_TEST_HOST` aponta para um IP `100.111.245.20` que não existe mais (o rsync dá `Connection timed out`, e o CD não tem sucesso desde 18/08). Reparo: reautenticar o kubo-test no Tailscale e atualizar `KUBO_TEST_HOST`. A chave `kubo-cd-prd` também expirou.
-2. **`deploy-remote.sh` não conhece o overlay central**: ele sobe `surrealdb` pelo nome (o que liga o profile `local-db` e acorda o banco local) e espera ele ficar healthy. Ajustar o script antes de o CD voltar a deployar com o overlay no `.env`.
-3. **Credenciais expostas**: as senhas do central (incluindo a `root`) apareceram em texto numa conversa. Rotacionar tudo (`./ops/rotate_and_show_credentials.sh`) e reexecutar `scripts/ops/kubo-test-use-central.sh` no kubo (o kubo-test usa as de `kubo/test`).
+O CD voltou a funcionar de ponta a ponta (merge na `main` → build → deploy no kubo-test pelo digest, com digest-guard e health-guard; PRD continua só por promoção manual). Eram **três camadas**, nesta ordem:
+1. O auth key do Tailscale `kubo-cd-dev` expirou em 23/10 (chaves duram no máximo 90 dias): renovado em `TS_AUTHKEY_DEV`. A `kubo-cd-prd` também expirou (renovar antes do próximo deploy em PRD).
+2. O nó do kubo-test saiu da tailnet (`NeedsLogin`): reautenticado pelo link de login (mesmo IP, `KUBO_TEST_HOST` ficou como estava) e com expiração de chave desligada.
+3. **A regra de SSH da ACL só aceita destinos com `tag:cd-dev` ou `tag:cd-prd`**, e o login interativo devolve o nó sem tag (dispositivo do usuário). Correção, sem editar a ACL e sem passar pelo painel: `tailscale up --ssh --advertise-tags=tag:cd-dev` dentro do LXC (o usuário é `autogroup:admin`, dono da tag). Vale para qualquer nó que perca a tag num re-login.
 
-### Como o deploy manual foi feito (substitui o CD enquanto ele estiver quebrado)
+Também: o `rsync --delete` do CD limpa tudo em `~/kubo` que não está no repo e já apagou o backup do `.env`. Ele agora vive em `~/.env.pre-central` (fora de `~/kubo`), e o script e o runbook do kubo foram ajustados (kubo #260).
+
+Tailscale dos nós atualizado para a 1.104.2 (kubo-test, kubo-prd, vaultwarden, uptime-kuma e o host, este com \`ops/upgrade_tailscale_host.sh\`).
+
+Pendências:
+1. **`deploy-remote.sh` não conhece o overlay central**: ele sobe `surrealdb` pelo nome, o que reinicia o banco local a cada deploy (foi o que se viu: `kubo-surrealdb-1` "Up 10 minutes" logo depois do CD). Ajustar antes de desligar o banco local.
+2. **Credenciais expostas numa conversa**: as senhas do central (incluindo a `root`) apareceram em texto. Risco baixo (só os IPs da allowlist conectam); rotacionar junto com a migração do kubo-prd (`./ops/rotate_and_show_credentials.sh` + `scripts/ops/kubo-test-use-central.sh`).
+
+### Como o deploy manual foi feito (fallback, caso o CD quebre de novo)
 
 Com o digest que o CI já publicou (`build` verde), sem build local: sincronizar os arquivos do commit (`git archive origin/main | ssh oute-server 'lxc exec kubo-test -- sudo -u ubuntu -H tar -x -C /home/ubuntu/kubo'`) e rodar `scripts/deploy-remote.sh sha256:<digest>` como `ubuntu` dentro do LXC (em segundo plano, com log). Os guards do script (digest e saúde) valem igual. Requer autorização explícita do dono (AGENTS.md do kubo).
 
