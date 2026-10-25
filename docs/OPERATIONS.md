@@ -124,7 +124,19 @@ Só com o central **vazio** ou com backup/export dos dados (um engine novo come�
 4. O init cria **usuários novos com senhas novas**: rode `./ops/rotate_and_show_credentials.sh` e guarde no cofre.
 5. Reimportar os dados (seção 8) e conferir. Depois de validar, apagar o diretório antigo.
 
-## 12. Armadilhas conhecidas
+## 12. Cutover do kubo para o central (test e prd)
+
+Fluxo em 3 passos, os mesmos validados no kubo-test (ensaiados de novo ponta a ponta em 2026-10-24):
+
+1. **Dados**: `./ops/migrate_kubo_data.sh <test|prd>` (pára os escritores do kubo, snapshot do central, exporta o banco local por pipe, limpa o destino, importa com `scripts/import_dump.py` e **confere** contagem por tabela e KNN; só apaga o dump depois de conferir). Se a conferência falhar, os escritores continuam parados e o script mostra o comando para retomar o banco local.
+2. **Config do kubo**: no repo do kubo, `scripts/ops/kubo-<test|prd>-use-central.sh` (pede as 3 senhas no terminal; guarda o `.env` em `~/.env.pre-central`; soma o overlay `compose.central.yml`).
+3. **Subir**: `./ops/start_kubo_on_central.sh <test|prd>` (prova `app`/`ro`/`rw`, recria api+scheduler na mesma imagem, digest-guard + health-guard, smoke com escrita no central).
+
+Cada script tem `--check` (só leitura). Pré-requisito do prd: o kubo de produção precisa estar com o código novo (signin de database e o arquivo `compose.central.yml`), o que vem da promoção do CD para PRD.
+
+**Não tire snapshot do LXC kubo-prd** para esse cutover: no pool `dir` o snapshot congela a instância por minutos (em produção seria indisponibilidade). O rollback do prd não precisa dele: o banco local não é tocado e `~/.env.pre-central` guarda a config anterior (`docker compose --profile local-db up -d`).
+
+## 13. Armadilhas conhecidas
 
 | Sintoma | Causa / ação |
 |---|---|
@@ -142,6 +154,7 @@ Só com o central **vazio** ou com backup/export dos dados (um engine novo come�
 | Script ops que escreve arquivo via `lxc exec` deixa o arquivo `root:root` | `lxc exec` roda como root: use `sudo -u <dono> -H` ou restaure o dono (`chown`) |
 | Nó do Tailscale perdeu a tag depois de um re-login e o SSH do CD é recusado (`tailnet policy does not permit you to SSH`) | A regra de SSH só aceita destinos com `tag:cd-dev`/`tag:cd-prd`. No LXC: `tailscale up --ssh --advertise-tags=tag:cd-dev` (ou `cd-prd`) |
 | Auth key do Tailscale expirou (`invalid key: API key … not valid`) | Chaves duram no máximo 90 dias: gerar outra (sem tag, como a anterior) e atualizar o secret do environment no GitHub |
+| Script remoto "passa" mas só a 1ª verificação rodou (`docker compose run`/`exec` dentro de `bash -s`) | Esses comandos leem o stdin e engolem o resto do script: use `</dev/null` e faça o script **exigir** a saída esperada (ver a prova das 3 credenciais em `start_kubo_on_central.sh`) |
 | `DEFINE USER` não troca senha | por desenho o init mantém existentes; use `--rotate` |
 | Container Docker do host "alcança" LXCs vizinhos | verdade para os **outros** LXCs (fora do escopo); este está protegido pelo nft |
 | `.env.example` mudou e nada aconteceu no LXC | o `.env` do LXC não é sobrescrito; edite-o (seção 4) |
