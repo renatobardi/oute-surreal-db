@@ -88,7 +88,7 @@ O CD voltou a funcionar de ponta a ponta (merge na `main` → build → deploy n
 
 Também: o `rsync --delete` do CD limpa tudo em `~/kubo` que não está no repo e já apagou o backup do `.env`. Ele agora vive em `~/.env.pre-central` (fora de `~/kubo`), e o script e o runbook do kubo foram ajustados (kubo #260).
 
-Tailscale dos nós atualizado para a 1.104.2 (kubo-test, kubo-prd, vaultwarden, uptime-kuma e o host, este com \`ops/upgrade_tailscale_host.sh\`).
+Tailscale dos nós atualizado para a 1.104.2 (kubo-test, kubo-prd, vaultwarden, uptime-kuma e o host, este com `ops/upgrade_tailscale_host.sh`).
 
 Pendências:
 1. **`deploy-remote.sh` não conhece o overlay central**: ele sobe `surrealdb` pelo nome, o que reinicia o banco local a cada deploy (foi o que se viu: `kubo-surrealdb-1` "Up 10 minutes" logo depois do CD). Ajustar antes de desligar o banco local.
