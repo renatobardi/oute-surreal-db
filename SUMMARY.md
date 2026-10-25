@@ -73,9 +73,21 @@ Nenhuma.
 
 ## Estado da F3 (2026-10-24)
 
-- Feito: instância em `surrealkv`; `init` com `rw_`; `scripts/import_dump.py` (testado); import real do kubo-test em `kubo/test` do central — **55 tabelas, 96.066 registros, 0 divergências, KNN do HNSW ok, 28 s**. A origem (kubo-test) segue intacta e é a que serve o app.
-- Falta: mudar o signin do kubo (PR), apontar o kubo-test para o central com `app_test`/`rw_test`/`ro_test`, validar por alguns dias com a origem viva, depois kubo-prd.
-- As credenciais atuais do central foram **recriadas** na troca de engine: rodar `./ops/rotate_and_show_credentials.sh` e guardar no cofre (as antigas deixaram de existir).
+- **kubo-test roda no central desde 2026-10-24.** Código com signin de database (kubo #256), overlay `compose.central.yml` (kubo #258), imagem do CI por digest (`sha256:4c83…9a42`), deploy **manual** (ver abaixo). Validado: 3 credenciais (`app_test`/`rw_test`/`ro_test`) autenticam, migrations reconhecem o banco importado (`applied=[]`), digest-guard e health-guard OK, UI responde (`/login` 200, `/healthz` 200), 0 erros nos logs, e uma escrita pelo caminho `rw_test` aparece no central e **não** no banco local.
+- Dados importados duas vezes, a segunda com os escritores parados: 55 tabelas, 96.066 registros, 0 divergências, KNN do HNSW ok.
+- **O banco local do kubo-test (`kubo-surrealdb-1`) e o sidecar de backup seguem rodando, sem uso.** A partir de agora o local está desatualizado em relação ao central. Rollback (`.env.pre-central` + `--profile local-db`, ou `lxc restore kubo-test pre-central`) perde o que for escrito no central depois da troca. Desligar o banco local depois do período de validação.
+- Snapshots: kubo-test `pre-cd-redeploy`, `pre-central`; central `pre-kubo-test-reimport` (expiram em 7 dias).
+- Falta: período de validação com o app real, depois kubo-prd (mesmo procedimento, database `prd`).
+
+### Pendências abertas (não bloqueiam o kubo-test)
+
+1. **CD do kubo quebrado, duas camadas.** (a) o auth key do Tailscale `kubo-cd-dev` expirou em 23/10: já renovado em `TS_AUTHKEY_DEV`; (b) o nó do kubo-test saiu da tailnet (`NeedsLogin`) e o secret `KUBO_TEST_HOST` aponta para um IP `100.111.245.20` que não existe mais (o rsync dá `Connection timed out`, e o CD não tem sucesso desde 18/08). Reparo: reautenticar o kubo-test no Tailscale e atualizar `KUBO_TEST_HOST`. A chave `kubo-cd-prd` também expirou.
+2. **`deploy-remote.sh` não conhece o overlay central**: ele sobe `surrealdb` pelo nome (o que liga o profile `local-db` e acorda o banco local) e espera ele ficar healthy. Ajustar o script antes de o CD voltar a deployar com o overlay no `.env`.
+3. **Credenciais expostas**: as senhas do central (incluindo a `root`) apareceram em texto numa conversa. Rotacionar tudo (`./ops/rotate_and_show_credentials.sh`) e reexecutar `scripts/ops/kubo-test-use-central.sh` no kubo (o kubo-test usa as de `kubo/test`).
+
+### Como o deploy manual foi feito (substitui o CD enquanto ele estiver quebrado)
+
+Com o digest que o CI já publicou (`build` verde), sem build local: sincronizar os arquivos do commit (`git archive origin/main | ssh oute-server 'lxc exec kubo-test -- sudo -u ubuntu -H tar -x -C /home/ubuntu/kubo'`) e rodar `scripts/deploy-remote.sh sha256:<digest>` como `ubuntu` dentro do LXC (em segundo plano, com log). Os guards do script (digest e saúde) valem igual. Requer autorização explícita do dono (AGENTS.md do kubo).
 
 ## Preview do obo (v2.6.5 → v3.3.0), com export v2 sintético
 
