@@ -24,6 +24,7 @@ Se algo no servidor diverge do que está aqui, o servidor está errado (ou este 
 | `tests/` | `init_surreal.test.sh` e `test_import_dump*.py` (unitários + integração contra SurrealDB real em Docker). Rodar: `./tests/init_surreal.test.sh` e `python3 -m unittest discover -s tests -p 'test_*.py'` |
 | `scripts/oute-assessment.sh` | Inventário read-only do servidor via SSH (relatórios em `reports/`, ignorado) |
 | `ops/provision_lxc.sh` | Roda **no Mac**: cria/atualiza o LXC, firewall, Docker, repo, compose, init e **verifica o isolamento**. `--check` só confere pré-condições |
+| `ops/upgrade_tailscale_host.sh` | Roda **no Mac**: atualiza o Tailscale do host oute-server sem perder a sessão no meio do `apt` (pede sudo). `--check` é só leitura |
 | `ops/rotate_and_show_credentials.sh` | Roda **no Mac**: gera senhas novas e mostra tudo no seu terminal |
 
 ## Em uma linha
