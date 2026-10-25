@@ -140,6 +140,8 @@ Só com o central **vazio** ou com backup/export dos dados (um engine novo come�
 | `lxc snapshot` trava a instância por minutos | No pool `dir` o snapshot copia o rootfs com a instância **congelada** (kubo-test: ~6 min, `Error: Instance is frozen`). Rode em segundo plano e acompanhe `lxc operation list`; não interrompa |
 | Reimportar num database que já tem tabelas falha (`DEFINE TABLE` sem OVERWRITE) | Limpar antes, preservando os usuários: como root, `INFO FOR DB;` e `REMOVE TABLE <t>;` para cada tabela. Não use `REMOVE DATABASE` (leva os usuários junto) |
 | Script ops que escreve arquivo via `lxc exec` deixa o arquivo `root:root` | `lxc exec` roda como root: use `sudo -u <dono> -H` ou restaure o dono (`chown`) |
+| Nó do Tailscale perdeu a tag depois de um re-login e o SSH do CD é recusado (`tailnet policy does not permit you to SSH`) | A regra de SSH só aceita destinos com `tag:cd-dev`/`tag:cd-prd`. No LXC: `tailscale up --ssh --advertise-tags=tag:cd-dev` (ou `cd-prd`) |
+| Auth key do Tailscale expirou (`invalid key: API key … not valid`) | Chaves duram no máximo 90 dias: gerar outra (sem tag, como a anterior) e atualizar o secret do environment no GitHub |
 | `DEFINE USER` não troca senha | por desenho o init mantém existentes; use `--rotate` |
 | Container Docker do host "alcança" LXCs vizinhos | verdade para os **outros** LXCs (fora do escopo); este está protegido pelo nft |
 | `.env.example` mudou e nada aconteceu no LXC | o `.env` do LXC não é sobrescrito; edite-o (seção 4) |
