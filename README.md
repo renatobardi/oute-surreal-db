@@ -25,6 +25,8 @@ Se algo no servidor diverge do que está aqui, o servidor está errado (ou este 
 | `scripts/oute-assessment.sh` | Inventário read-only do servidor via SSH (relatórios em `reports/`, ignorado) |
 | `ops/provision_lxc.sh` | Roda **no Mac**: cria/atualiza o LXC, firewall, Docker, repo, compose, init e **verifica o isolamento**. `--check` só confere pré-condições |
 | `ops/upgrade_tailscale_host.sh` | Roda **no Mac**: atualiza o Tailscale do host oute-server sem perder a sessão no meio do `apt` (pede sudo). `--check` é só leitura |
+| `ops/migrate_kubo_data.sh` | Roda **no Mac**: copia os dados do banco local do kubo (`test`/`prd`) para o central e **confere** contagem por tabela e KNN. Ensaio: `--target-db rehearsal --no-stop-writers` |
+| `ops/start_kubo_on_central.sh` | Roda **no Mac**: sobe o kubo no central com os guards do deploy; prova as 3 credenciais e que o app grava no central |
 | `ops/rotate_and_show_credentials.sh` | Roda **no Mac**: gera senhas novas e mostra tudo no seu terminal |
 
 ## Em uma linha
