@@ -6,7 +6,8 @@
 # tailscaled derruba a sessão; se o apt estivesse atrelado a ela, morreria no meio e deixaria o dpkg
 # pela metade. Aqui o apt roda desacoplado (systemd-run), o script religa o SSH e confere o resultado.
 # O host também sustenta os proxies LXD ligados ao IP Tailscale (UI do kubo etc.): o estado desses
-# listeners é registrado antes e comparado depois.
+# listeners é registrado antes e comparado depois (sem o escopo `%interface`, que versões novas do
+# tailscaled passaram a exibir na porta do próprio daemon).
 #
 #   ./ops/upgrade_tailscale_host.sh --check   # só leitura: estado atual e versão-alvo
 #   ./ops/upgrade_tailscale_host.sh           # atualiza (pede a senha do sudo UMA vez)
@@ -27,7 +28,7 @@ die()  { printf '  [ERRO]  %s\n' "$*" >&2; exit 1; }
 snapshot() { # versão | ip | listeners nos IPs tailscale do host | tailscaled
   r 'ip="$(tailscale ip -4)"; echo "version=$(tailscale version | head -1)"; echo "ip=${ip}";
      echo "tailscaled=$(systemctl is-active tailscaled)";
-     echo "listeners=$(ss -ltn | awk -v ip="${ip}" "index(\$4, ip) == 1 {print \$4}" | sort | tr "\n" " ")"'
+     echo "listeners=$(ss -ltn | awk -v ip="${ip}" "index(\$4, ip) == 1 {print \$4}" | sed "s/%[^:]*//" | sort | tr "\n" " ")"'
 }
 
 echo ">> Estado atual do host"
