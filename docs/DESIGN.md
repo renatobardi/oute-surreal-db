@@ -70,7 +70,7 @@ Clientes autorizados hoje: `10.173.117.21` (kubo-prd), `10.173.117.18` (kubo-tes
 |---|---|
 | F1 Preparação (assessments, desenho, docs) | feito |
 | F2 LXC + instância + isolamento | feito 2026-10-18 (snapshot `pos-f2`) |
-| F3 Piloto kubo-test → kubo-prd | em andamento: dados do kubo-test já no central; falta signin do kubo e validação |
+| F3 Piloto kubo-test → kubo-prd | kubo-test **rodando no central** (2026-10-24); em validação; depois kubo-prd |
 | F4 obo (v2 → v3, exige teste do app) | |
 | F5 oute-supabase-db | repo próprio |
 | F6 Backup | a definir |

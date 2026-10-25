@@ -143,7 +143,7 @@
 <li><code>compose up</code>; <code>init_surreal.sh</code>; senhas → cofre</li></ul>
 <p><strong>Verificado (também após reboot do LXC):</strong> healthy · kubo-test alcança · vaultwarden e containers Docker do host (<code>bridge</code>, <code>oute-agent_oute</code>) bloqueados. Script: <code>ops/provision_lxc.sh</code> (<code>--check</code> valida só as pré-condições). LXC <code>10.173.117.50</code>, 2 CPU, 3 GiB.</p></div>
 <div class="ph next"><h3>F3 · Piloto kubo-test → kubo-prd <span class="tag">em andamento</span></h3>
-<p>Dados do kubo-test já importados no central (<code>scripts/import_dump.py</code>): 55 tabelas, 96.066 registros, 0 divergências, 28 s. Falta o signin do kubo (usuários de database) e a validação com o app; origem viva até confirmar; rollback = URL antiga.</p></div>
+<p>kubo-test <strong>rodando no central</strong> desde 2026-10-24 (signin de database, overlay do compose, imagem do CI por digest). Dados importados com a ferramenta (55 tabelas, 96.066 registros, 0 divergências) e smoke validado. Em período de validação; banco local parado de uso até desligar. Depois: kubo-prd.</p></div>
 <div class="ph"><h3>F4 · obo</h3>
 <p>Export v2 → import v3; rodada de testes do app (SurrealQL v3 tem breaking changes).</p></div>
 <div class="ph"><h3>F5 · oute-supabase-db</h3>

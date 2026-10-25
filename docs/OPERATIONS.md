@@ -93,7 +93,7 @@ Método: export na origem → `scripts/import_dump.py` no destino. A **origem fi
    ```
    `--dry-run` mostra só o plano. A ferramenta envia schema → dados → arestas → índices em lotes, **ignora `DEFINE USER/ACCESS` do dump**, recusa `UPDATE` (no v3 não cria registro) e aborta antes de enviar se houver statement desconhecido.
 4. **Conferir sempre**: o `/import` responde `[]` no sucesso e o `OPTION IMPORT` desliga coerção de tipo e `ENFORCED`, então "sem erro" não prova nada. Compare contagem por tabela origem × destino, índices e `DEFINE FUNCTION`; se houver HNSW, rode uma busca KNN.
-5. Apagar o dump do LXC (`rm /root/dump.surql`): é dado sensível.
+5. Se o destino já tem dados de uma tentativa anterior, **limpe antes** (tabelas, não usuários; ver armadilhas). Apagar o dump do LXC (`rm /root/dump.surql`): é dado sensível.
 6. Apontar o app (ou um ambiente de teste dele) para o destino com `app_<db>`/`rw_<db>`/`ro_<db>`; validar fluxos reais.
 7. Só depois de confirmado, desligar a origem (decisão do dono).
 
@@ -137,6 +137,9 @@ Só com o central **vazio** ou com backup/export dos dados (um engine novo come�
 | Script remoto com `pkill -f nome` mata o próprio shell | O padrão aparece na linha de comando do próprio shell; use `pgrep -f "[n]ome"` em comando separado |
 | `/import` diz OK mas faltam dados / dado com tipo errado | `OPTION IMPORT` desliga validação e o sucesso volta `[]`; confira contagens. `UPDATE` no v3 não cria registro (use `UPSERT`; a ferramenta recusa `UPDATE`) |
 | EDITOR consegue `DEFINE TABLE` | É o comportamento do papel: ele só não gerencia usuários/acessos. Use OWNER só onde precisa de DDL de usuários |
+| `lxc snapshot` trava a instância por minutos | No pool `dir` o snapshot copia o rootfs com a instância **congelada** (kubo-test: ~6 min, `Error: Instance is frozen`). Rode em segundo plano e acompanhe `lxc operation list`; não interrompa |
+| Reimportar num database que já tem tabelas falha (`DEFINE TABLE` sem OVERWRITE) | Limpar antes, preservando os usuários: como root, `INFO FOR DB;` e `REMOVE TABLE <t>;` para cada tabela. Não use `REMOVE DATABASE` (leva os usuários junto) |
+| Script ops que escreve arquivo via `lxc exec` deixa o arquivo `root:root` | `lxc exec` roda como root: use `sudo -u <dono> -H` ou restaure o dono (`chown`) |
 | `DEFINE USER` não troca senha | por desenho o init mantém existentes; use `--rotate` |
 | Container Docker do host "alcança" LXCs vizinhos | verdade para os **outros** LXCs (fora do escopo); este está protegido pelo nft |
 | `.env.example` mudou e nada aconteceu no LXC | o `.env` do LXC não é sobrescrito; edite-o (seção 4) |
