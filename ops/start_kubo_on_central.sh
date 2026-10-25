@@ -106,7 +106,8 @@ step "Smoke: UI, logs e prova de que o app grava no central"
 UI_ADDR="$(rx "lxc config device show ${KUBO_LXC}" </dev/null | sed -n 's/^ *connect: tcp://p' | head -1)"
 [ -n "${UI_ADDR}" ] || UI_ADDR="$(rx "lxc config device get ${KUBO_LXC} eth0 ipv4.address" </dev/null):3900"
 for p in /login /healthz; do
-  code="$(rx "curl -s -o /dev/null -m 8 -w %{http_code} http://${UI_ADDR}${p}" </dev/null)"
+  # NOSONAR (shell:S5332): http de propósito: tráfego ssh -> bridge privada do LXD até a UI do kubo; a exposição real é WireGuard/Tailscale
+  code="$(rx "curl -s -o /dev/null -m 8 -w %{http_code} http://${UI_ADDR}${p}" </dev/null)" # NOSONAR
   [ "${code}" = 200 ] && ok "UI ${p} -> 200" || die "UI ${p} -> ${code}"
 done
 { printf '%s' "${PRELUDE}"; cat <<'REMOTE'
