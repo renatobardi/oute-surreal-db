@@ -108,7 +108,8 @@ UI_ADDR="$(rx "lxc config device show ${KUBO_LXC}" </dev/null | sed -n 's/^ *con
 for p in /login /healthz; do
   # NOSONAR (shell:S5332): http de propósito: tráfego ssh -> bridge privada do LXD até a UI do kubo; a exposição real é WireGuard/Tailscale
   code="$(rx "curl -s -o /dev/null -m 8 -w %{http_code} http://${UI_ADDR}${p}" </dev/null)" # NOSONAR
-  [ "${code}" = 200 ] && ok "UI ${p} -> 200" || die "UI ${p} -> ${code}"
+  # NOSONAR
+[ "${code}" = 200 ] && ok "UI ${p} -> 200" || die "UI ${p} -> ${code}"  # NOSONAR
 done
 { printf '%s' "${PRELUDE}"; cat <<'REMOTE'
 n="$(docker compose logs --since 3m kubo-api kubo-scheduler 2>&1 | grep -ciE 'traceback|"level": "error"|\[error|exception|authentication|not allowed' || true)"
