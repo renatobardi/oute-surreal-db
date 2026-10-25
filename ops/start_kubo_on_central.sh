@@ -18,11 +18,11 @@
 set -euo pipefail
 
 usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
-[ $# -ge 1 ] || usage
+[[ $# -ge 1 ]] || usage
 ENVNAME="$1"; shift
 case "${ENVNAME}" in test|prd) ;; *) usage ;; esac
 CHECK_ONLY=0
-[ "${1:-}" = "--check" ] && CHECK_ONLY=1
+[[ "${1:-}" = "--check" ]] && CHECK_ONLY=1
 
 HOST="${OUTE_HOST:-oute-server}"
 KUBO_LXC="kubo-${ENVNAME}"
@@ -59,7 +59,7 @@ echo "  [ok]    .env com overlay, auth de database e as 3 credenciais"
 REMOTE
 rx "lxc exec ${CENTRAL} -- sh -c 'docker inspect -f \"{{.State.Health.Status}}\" oute-surreal-db'" </dev/null | grep -qx healthy || die "central não está healthy"
 ok "central healthy"
-[ "${CHECK_ONLY}" -eq 0 ] || { echo; echo ">> --check concluído; nada foi alterado."; exit 0; }
+[[ "${CHECK_ONLY}" -eq 0 ]] || { echo; echo ">> --check concluído; nada foi alterado."; exit 0; }
 
 step "Provando as 3 credenciais contra o central (execuções descartáveis, nada sobe ainda)"
 { printf '%s' "${PRELUDE}"; cat <<'REMOTE'
@@ -104,16 +104,16 @@ REMOTE
 
 step "Smoke: UI, logs e prova de que o app grava no central"
 UI_ADDR="$(rx "lxc config device show ${KUBO_LXC}" </dev/null | sed -n 's/^ *connect: tcp://p' | head -1)"
-[ -n "${UI_ADDR}" ] || UI_ADDR="$(rx "lxc config device get ${KUBO_LXC} eth0 ipv4.address" </dev/null):3900"
+[[ -n "${UI_ADDR}" ]] || UI_ADDR="$(rx "lxc config device get ${KUBO_LXC} eth0 ipv4.address" </dev/null):3900"
 for p in /login /healthz; do
   # NOSONAR (shell:S5332): http de propósito: tráfego ssh -> bridge privada do LXD até a UI do kubo; a exposição real é WireGuard/Tailscale
   code="$(rx "curl -s -o /dev/null -m 8 -w %{http_code} http://${UI_ADDR}${p}" </dev/null)" # NOSONAR
   # NOSONAR
-[ "${code}" = 200 ] && ok "UI ${p} -> 200" || die "UI ${p} -> ${code}"  # NOSONAR
+[[ "${code}" = 200 ]] && ok "UI ${p} -> 200" || die "UI ${p} -> ${code}"  # NOSONAR
 done
 { printf '%s' "${PRELUDE}"; cat <<'REMOTE'
 n="$(docker compose logs --since 3m kubo-api kubo-scheduler 2>&1 | grep -ciE 'traceback|"level": "error"|\[error|exception|authentication|not allowed' || true)"
-[ "${n}" = 0 ] && echo "  [ok]    0 erros nos logs (3 min)" || { echo "  [ERRO]  ${n} ocorrências de erro nos logs"; exit 1; }
+[[ "${n}" = 0 ]] && echo "  [ok]    0 erros nos logs (3 min)" || { echo "  [ERRO]  ${n} ocorrências de erro nos logs"; exit 1; }
 docker compose exec -T kubo-api python -c "
 from kubo.store import client
 with client.connect_rw() as rw:
