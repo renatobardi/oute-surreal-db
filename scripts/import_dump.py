@@ -16,6 +16,7 @@ traz corpo quando há erro). Por isso SEMPRE confira contagem por tabela origem 
 Uso:
   SURREAL_ENDPOINT=http://10.173.117.50:8000 SURREAL_PASS=... ./scripts/import_dump.py dump.surql <ns> <db>
   ./scripts/import_dump.py dump.surql <ns> <db> --dry-run      # só mostra o plano
+  ./scripts/import_dump.py dump.surql <ns> <db> --data-only    # só dados/arestas (schema vem das migrations do app)
 """
 import argparse
 import base64
@@ -102,6 +103,30 @@ def make_plan(statements):
     return plan, warnings
 
 
+# Arestas exportadas pelo v2 trazem um marcador interno `__: true` (chaves em ordem, então sempre a primeira),
+# que o v3 grava como campo comum. Só sai de statements de relação e só nessa posição.
+_V2_EDGE_MARKER = re.compile(r"\s*__:\s*true\s*,\s*")
+
+
+def strip_v2_edge_marker(stmt):
+    """Tira `__: true,` logo depois de cada `{` estrutural; strings ficam intactas."""
+    out, last = [], 0
+    for m in _TOKEN.finditer(stmt):
+        if m.group() != "{":
+            continue
+        marker = _V2_EDGE_MARKER.match(stmt, m.end())
+        if marker:
+            out.append(stmt[last:m.end()] + " ")
+            last = marker.end()
+    out.append(stmt[last:])
+    return "".join(out)
+
+
+def data_only(plan):
+    """Mantém só dados e arestas (schema e índices já vêm das migrations do app no destino)."""
+    return {phase: (stmts if phase in ("data", "relation") else []) for phase, stmts in plan.items()}
+
+
 def make_batches(statements, max_bytes):
     """Agrupa statements consecutivos em lotes de até max_bytes; um statement maior que o limite fica sozinho."""
     batches, current, size = [], [], 0
@@ -144,6 +169,9 @@ def main(argv=None):
     parser.add_argument("--batch-bytes", type=int, default=2_000_000, help="tamanho máximo de um lote (default 2 MB)")
     parser.add_argument("--timeout", type=int, default=600, help="timeout por request, em segundos")
     parser.add_argument("--dry-run", action="store_true", help="só mostra o plano; não conecta")
+    parser.add_argument("--data-only", action="store_true",
+                        help="envia só dados e arestas (o schema vem das migrations do app) e tira o `__: true` "
+                             "das arestas exportadas pelo v2")
     args = parser.parse_args(argv)
 
     dump_path = os.path.realpath(args.dump)
@@ -158,6 +186,11 @@ def main(argv=None):
         print("ERRO: %s" % exc, file=sys.stderr)
         return 2
 
+    if args.data_only:
+        skipped = len(plan["schema"]) + len(plan["index"])
+        plan = data_only(plan)
+        plan["relation"] = [strip_v2_edge_marker(stmt) for stmt in plan["relation"]]
+        warnings.append("--data-only: %d statements de schema/índice não enviados" % skipped)
     for warning in warnings:
         print("aviso: " + warning)
     batches = {phase: make_batches(plan[phase], args.batch_bytes) for phase in PHASES}

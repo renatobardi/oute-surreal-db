@@ -100,6 +100,35 @@ Método: export na origem → `scripts/import_dump.py` no destino. A **origem fi
 Resultado medido (kubo-test, 2026-10-24): 55 tabelas, 96.066 registros, 0 divergências, import em 28 s no `surrealkv`.
 Ordem: **kubo-test → kubo-prd → obo**. kubo: v3.1.5 → v3.3.0, direto. **obo: v2.6.5 → v3.3.0 não é só export/import**: o v3 rejeita a sintaxe de índice do v2 (`SEARCH ANALYZER … BM25(…) DOC_IDS_ORDER …`), removeu MTREE e o operador KNN `<|k|>` (use HNSW e `<|k,EF|>`), e as arestas v2 trazem um campo `__: true` que vira lixo. Adapte schema e queries do obo antes.
 
+## 8.1 Gate do ADR-0015: teste de restore antes de um cutover
+
+Nenhum app migra para o central sem **um backup do `surreal-platform` com sucesso e um restore de teste** (ADR-0015 do oute-infra-ops). O backup roda no `oute-backup-weekly` do host (sábado 02:00) e grava um snapshot restic por ns/db, com as tags `oute-surreal-db,<ns>,<db>,surreal-platform`.
+
+O teste restaura um snapshot num namespace descartável (`restore_*`) e confere o restaurado contra o **próprio dump** (registros por tabela, tabelas, funções, índices, KNN se houver HNSW), não contra a origem viva, que mudou depois do backup. `scripts/restore_test.py` só escreve em namespaces `restore_*`.
+
+1. **No oute-server**: escolher o snapshot (o mais recente de um ns/db com dados; HNSW de preferência: `kubo/test`).
+   ```sh
+   sudo bash -c 'set -a; . /etc/oute/backup.env; set +a; restic snapshots --tag surreal-platform --compact'
+   ```
+2. **No oute-server**: copiar o dump do restic para o LXC do central (não passa pelo disco do host) e conferir o hash dos dois lados.
+   ```sh
+   SNAP=<id>; SRC=/containers/oute-surreal-db/kubo/test.surql
+   sudo bash -c "set -a; . /etc/oute/backup.env; set +a; restic dump $SNAP $SRC" | lxc exec oute-surreal-db -- sh -c 'umask 077; cat > /root/restore-test.surql'
+   sudo bash -c "set -a; . /etc/oute/backup.env; set +a; restic dump $SNAP $SRC" | sha256sum
+   lxc exec oute-surreal-db -- sha256sum /root/restore-test.surql
+   ```
+3. **No LXC** (`lxc exec oute-surreal-db -- bash`), como root do SurrealDB:
+   ```sh
+   cd /opt/oute-surreal-db && set -a && . ./.env && set +a
+   export SURREAL_ENDPOINT=http://127.0.0.1:8000 SURREAL_PASS="$SURREAL_ROOT_PASS"
+   python3 scripts/restore_test.py prepare restore_kubo test
+   python3 scripts/import_dump.py /root/restore-test.surql restore_kubo test
+   python3 scripts/restore_test.py verify /root/restore-test.surql restore_kubo test   # exit 0 = gate ok
+   python3 scripts/restore_test.py drop restore_kubo
+   rm /root/restore-test.surql
+   ```
+4. Registrar data, snapshot e resultado no SUMMARY.md (estado do gate).
+
 ## 9. Recriar/atualizar o LXC (idempotente)
 
 ```sh
