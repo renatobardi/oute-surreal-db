@@ -9,6 +9,7 @@ contagem de registros por tabela, conjunto de tabelas, DEFINE FUNCTION e DEFINE 
   (importar com scripts/import_dump.py DUMP NS DB)
   restore_test.py verify DUMP NS DB      confere; exit 1 se divergir
   restore_test.py drop NS                remove o namespace descartável (só restore_*)
+  restore_test.py counts DUMP NS DB      só leitura, qualquer ns/db: registros por tabela dump x destino
 
 Roda DENTRO do LXC, como root do SurrealDB: SURREAL_ENDPOINT, SURREAL_PASS (e SURREAL_USER, padrão root).
 Nenhuma senha é impressa. Só toca namespaces restore_*: o resto do central é só lido.
@@ -180,6 +181,33 @@ def verify(dump_path, ns, db):
     return 0
 
 
+def counts(dump_path, ns, db):
+    """Só leitura, em qualquer ns/db: registros por tabela do dump x destino (tabelas a mais no destino
+    não contam: podem ser do app). Usado para conferir uma migração de dados (import --data-only)."""
+    if not (NAME.match(ns) and NAME.match(db)):
+        raise CheckError("ns/db precisam ser identificadores simples")
+    with open(dump_path, encoding="utf-8") as fh:
+        expected = dump_counts(fh.read())
+    query = client(ns, db)
+    tables = set(query("INFO FOR DB;")[0]["tables"])
+    missing = sorted(set(expected) - tables)
+    present = sorted(set(expected) & tables)
+    got = {}
+    if present:
+        results = query("".join(f"SELECT count() FROM {t} GROUP ALL;" for t in present))
+        got = {t: (r[0]["count"] if r else 0) for t, r in zip(present, results)}
+    diffs = [(t, expected[t], got[t]) for t in present if expected[t] != got[t]]
+    print(f"  tabelas={len(expected)} registros dump={sum(expected.values())} destino={sum(got.values())}")
+    for t in missing:
+        if expected[t]:
+            diffs.append((t, expected[t], "tabela ausente"))
+    for t, want, have in diffs:
+        print(f"  [ERRO]  {t}: dump={want} destino={have}")
+    if not diffs:
+        print(f"  [ok]    {ns}/{db} confere com {dump_path}")
+    return 1 if diffs else 0
+
+
 def drop(ns):
     throwaway(ns)
     client()(f"REMOVE NAMESPACE IF EXISTS {ns};")
@@ -196,6 +224,10 @@ def main(argv=None):
     v.add_argument("dump")
     v.add_argument("ns")
     v.add_argument("db")
+    c = sub.add_parser("counts")
+    c.add_argument("dump")
+    c.add_argument("ns")
+    c.add_argument("db")
     d = sub.add_parser("drop")
     d.add_argument("ns")
     args = parser.parse_args(argv)
@@ -204,6 +236,8 @@ def main(argv=None):
             prepare(args.ns, args.db)
         elif args.command == "verify":
             return verify(args.dump, args.ns, args.db)
+        elif args.command == "counts":
+            return counts(args.dump, args.ns, args.db)
         else:
             drop(args.ns)
     except (CheckError, OSError) as exc:

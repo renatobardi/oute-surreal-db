@@ -160,5 +160,24 @@ class MainPathValidation(unittest.TestCase):
             self.assertEqual(self.run_main(ok)[0], 0)
 
 
+class DataOnly(unittest.TestCase):
+    def test_v2_edge_marker_is_stripped_at_object_start(self):
+        out = imp.strip_v2_edge_marker("INSERT RELATION [ { __: true, id: r:1 }, {__:true,id: r:2} ];")
+        self.assertEqual(out, "INSERT RELATION [ { id: r:1 }, { id: r:2} ];")
+
+    def test_v2_edge_marker_inside_a_string_is_kept(self):
+        stmt = "INSERT RELATION [ { __: true, id: r:1, note: '{ __: true, x' } ];"
+        self.assertEqual(imp.strip_v2_edge_marker(stmt), "INSERT RELATION [ { id: r:1, note: '{ __: true, x' } ];")
+
+    def test_data_only_keeps_data_and_relations(self):
+        plan, _ = imp.make_plan(["DEFINE TABLE a;", "INSERT [{ id: a:1 }];", "INSERT RELATION [{ id: r:1 }];",
+                                 "DEFINE INDEX i ON a FIELDS x;"])
+        kept = imp.data_only(plan)
+        self.assertEqual(kept["schema"], [])
+        self.assertEqual(kept["index"], [])
+        self.assertEqual(len(kept["data"]), 1)
+        self.assertEqual(len(kept["relation"]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

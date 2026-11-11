@@ -55,7 +55,7 @@ Nenhuma.
 1. **Preparação** (esta branch): assessments, divisão, decisões, docs, compose/init para o LXC. ✔
 2. **LXC oute-surreal-db** ✔ (2026-10-18): `10.173.117.50`, 2 CPU, 3 GiB, nesting, autostart, snapshots 7d (snapshot `pos-f2`); nft no LXC, `docker.io`, repo em `/opt/oute-surreal-db`, `.env` 600, compose, init. Verificado, inclusive após reboot do LXC: healthy; kubo-test alcança; vaultwarden e containers Docker do host (`bridge`, `oute-agent_oute`) bloqueados (13 drops no contador). Scripts versionados em `ops/` (`provision_lxc.sh`, `rotate_and_show_credentials.sh`). Pendente do dono: guardar credenciais no cofre.
 3. **Piloto kubo-test** — *em andamento*: dados já importados no central (ver "Estado da F3"); falta o signin do kubo e a validação com o app.
-4. **obo**: export v2 → import v3, rodada de testes do app.
+4. **obo** — *em andamento*: código pronto para v3 (obo #52, em produção ainda no v2); gate do ADR-0015 cumprido (ver "Gate do backup"); falta o cutover dos dados.
 5. **oute-supabase-db**: repo + LXC + pilotos (financial-control → frentes → hanko). Plano próprio naquele repo.
 6. **Backup**: política de snapshots LXC.
 
@@ -97,6 +97,17 @@ Pendências:
 ### Como o deploy manual foi feito (fallback, caso o CD quebre de novo)
 
 Com o digest que o CI já publicou (`build` verde), sem build local: sincronizar os arquivos do commit (`git archive origin/main | ssh oute-server 'lxc exec kubo-test -- sudo -u ubuntu -H tar -x -C /home/ubuntu/kubo'`) e rodar `scripts/deploy-remote.sh sha256:<digest>` como `ubuntu` dentro do LXC (em segundo plano, com log). Os guards do script (digest e saúde) valem igual. Requer autorização explícita do dono (AGENTS.md do kubo).
+
+## Gate do backup (ADR-0015), 2026-11-11
+
+- Backup `surreal-platform` ok: snapshot restic semanal por ns/db (`kubo/prd`, `kubo/test`, `main/main`, `obo/prd`), o último em 2026-11-10, sem aviso no `oute-backup-weekly`.
+- Restore de teste ok (`scripts/restore_test.py`, OPERATIONS §8.1): snapshot `1e20765d` (`kubo/test`), hash igual nos dois lados, 55 tabelas e 99.324 registros restaurados = dump, KNN no HNSW `chunk_hnsw`, namespace `restore_kubo` removido.
+- Achado: existe um ns/db `main/main` no central, fora do desenho (`kubo:prd,test obo:prd`). Investigar a origem antes de removê-lo.
+
+## Cutover do obo (preparação, 2026-11-11)
+
+- obo #52: migrations rodam do zero no v3 (e continuam rodando no v2), signin de database (`SURREAL_AUTH_LEVEL=database`) também para a fila surreal-commands, funções de busca com a semântica de GROUP BY do v3. O SDK Python fica no 1.0.8 (funciona com o v3). Detalhes no ADR-011 do obo.
+- Fluxo dos dados, ensaiado ponta a ponta contra v2.6.5 → v3.3.0 local: export v2 → migrations do obo no destino → `scripts/clear_data.py` (tira os dados padrão das migrations, mantém o schema) → `import_dump.py --data-only` (tira `__: true` das arestas v2) → `restore_test.py counts` (dump x destino).
 
 ## Preview do obo (v2.6.5 → v3.3.0), com export v2 sintético
 
