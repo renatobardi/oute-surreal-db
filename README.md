@@ -21,7 +21,8 @@ Se algo no servidor diverge do que está aqui, o servidor está errado (ou este 
 | `.env.example` | Variáveis; o `.env` real vive só no LXC (600, nunca no git) |
 | `scripts/init_surreal.sh` | Cria namespaces/databases/usuários (idempotente, `--rotate`). Roda **dentro** do LXC |
 | `scripts/import_dump.py` | Importa um dump `.surql` em ordem (schema → dados → arestas → índices); ignora `DEFINE USER`, recusa `UPDATE`. Roda **dentro** do LXC |
-| `tests/` | `init_surreal.test.sh` e `test_import_dump*.py` (unitários + integração contra SurrealDB real em Docker). Rodar: `./tests/init_surreal.test.sh` e `python3 -m unittest discover -s tests -p 'test_*.py'` |
+| `scripts/restore_test.py` | Teste de restore do backup `surreal-platform` num namespace descartável `restore_*` (gate do ADR-0015): `prepare`, `verify` contra o próprio dump, `drop`. Roda **dentro** do LXC |
+| `tests/` | `init_surreal.test.sh`, `test_import_dump*.py` e `test_restore_test.py` (unitários + integração contra SurrealDB real em Docker). Rodar: `./tests/init_surreal.test.sh` e `python3 -m unittest discover -s tests -p 'test_*.py'` |
 | `scripts/oute-assessment.sh` | Inventário read-only do servidor via SSH (relatórios em `reports/`, ignorado) |
 | `ops/provision_lxc.sh` | Roda **no Mac**: cria/atualiza o LXC, firewall, Docker, repo, compose, init e **verifica o isolamento**. `--check` só confere pré-condições |
 | `ops/upgrade_tailscale_host.sh` | Roda **no Mac**: atualiza o Tailscale do host oute-server sem perder a sessão no meio do `apt` (pede sudo). `--check` é só leitura |
