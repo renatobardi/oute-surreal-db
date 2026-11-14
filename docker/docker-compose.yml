@@ -16,6 +16,8 @@ services:
     command:
       - start
       - --no-banner
+      # Sem ns/db padrão 'main/main' (v3 cria num datastore novo); cada projeto é criado pelo init_surreal.sh.
+      - --no-defaults
       - --log
       - info
       - --bind
