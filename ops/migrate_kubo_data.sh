@@ -163,7 +163,7 @@ step "Concluído"
 echo "  Dados de ${KUBO_LXC} copiados e conferidos em ${NS}/${TARGET_DB} (dump apagado do central)."
 if [ "${STOP_WRITERS}" -eq 1 ]; then
   echo "  scheduler e api do ${KUBO_LXC} seguem PARADOS. Próximos passos:"
-  echo "    1. config do .env:    (no repo do kubo) ./scripts/ops/kubo-${ENVNAME}-use-central.sh"
+  echo "    1. config do .env:    (no repo do kubo) KUBO_TEST_NAME=${KUBO_LXC} KUBO_CENTRAL_DB=${TARGET_DB} ./scripts/ops/kubo-test-use-central.sh"
   echo "    2. subir no central:  ./ops/start_kubo_on_central.sh ${ENVNAME}"
   echo "  Para desistir e voltar ao banco local:  ${RESUME}"
 fi

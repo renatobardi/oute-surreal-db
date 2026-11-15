@@ -91,8 +91,8 @@ Também: o `rsync --delete` do CD limpa tudo em `~/kubo` que não está no repo 
 Tailscale dos nós atualizado para a 1.104.2 (kubo-test, kubo-prd, vaultwarden, uptime-kuma e o host, este com `ops/upgrade_tailscale_host.sh`).
 
 Pendências:
-1. **`deploy-remote.sh` não conhece o overlay central**: ele sobe `surrealdb` pelo nome, o que reinicia o banco local a cada deploy (foi o que se viu: `kubo-surrealdb-1` "Up 10 minutes" logo depois do CD). Ajustar antes de desligar o banco local.
-2. **Credenciais expostas numa conversa**: as senhas do central (incluindo a `root`) apareceram em texto. Risco baixo (só os IPs da allowlist conectam); rotacionar junto com a migração do kubo-prd (`./ops/rotate_and_show_credentials.sh` + `scripts/ops/kubo-test-use-central.sh`).
+1. ~~**`deploy-remote.sh` não conhece o overlay central**~~: resolvido no kubo #261 (com o overlay ativo o deploy não sobe nem espera o banco local).
+2. **Credenciais expostas numa conversa**: as senhas do central (incluindo a `root`) apareceram em texto. Risco baixo (só os IPs da allowlist conectam). **Ainda pendente** (não foi feito no cutover do kubo-prd em 2026-11-15): com apps já usando o banco, `rotate_and_show_credentials.sh` (rotaciona todos) não serve mais; rotacionar por projeto (`./scripts/init_surreal.sh --rotate kubo` no LXC + `kubo-test-use-central.sh` em test e prd) e a `root` (procedimento da OPERATIONS §5, ainda não exercitado).
 
 ### Como o deploy manual foi feito (fallback, caso o CD quebre de novo)
 
@@ -110,7 +110,16 @@ Com o digest que o CI já publicou (`build` verde), sem build local: sincronizar
 - Fluxo dos dados, ensaiado ponta a ponta contra v2.6.5 → v3.3.0 local: export v2 → migrations do obo no destino → `scripts/clear_data.py` (tira os dados padrão das migrations, mantém o schema) → `import_dump.py --data-only` (tira `__: true` das arestas v2) → `restore_test.py counts` (dump x destino).
 
 - Feito em 2026-11-11, ~5 min de indisponibilidade: app parado → `surreal export --log none` do v2 (sem `--log none` o v2 escreve o log colorido no stdout e corrompe o dump) → migrations do obo com `app_prd` (container avulso) → `clear_data.py` → `import_dump.py --data-only` → `restore_test.py counts` (598 = 598) → `/etc/obo/prd.env` no central (`SURREAL_AUTH_LEVEL=database`, senha conferida por hash; anterior em `prd.env.pre-central`) → app no ar na versão 28 sem migration pendente.
-- Limpeza pendente: serviço `surrealdb` fora do compose de prd (obo, profile `local-db`), container `obo-surrealdb-1` removido, backup do obo-prd só de `notebook_data` (oute-catalog), dump apagado, ADR-0003 do oute-infra-ops. Os dados v2 ficam em `/opt/app/surreal_data` até o próximo backup semanal do central confirmar `obo/prd`.
+- Limpeza feita: serviço `surrealdb` fora do compose de prd (obo #54, profile `local-db`), container `obo-surrealdb-1` removido, backup do obo-prd só de `notebook_data` (oute-catalog #14), dump apagado, ADR-0003 do oute-infra-ops (#46). `/opt/app/surreal_data` apagado em 2026-11-14, depois de o semanal confirmar `obo/prd` (snapshot `c4bc7dcc`).
+
+## Cutover do kubo-prd (2026-11-15) — F5 concluída
+
+- Pré-requisito: kubo promovido para PRD pelo CD (`workflow_dispatch` do `cd.yml` + aprovação no environment `prd`), digest `sha256:1df2bdc79c4c…`, que traz o `compose.central.yml`. A primeira tentativa caiu no Tailscale: `TS_AUTHKEY_PRD` tinha expirado (auth keys duram até 90 dias).
+- `./ops/migrate_kubo_data.sh prd`: dump de 57 MB (54 tabelas), import em 9 s, **0 divergências em 53.893 registros**, KNN no `chunk_hnsw` ok. O snapshot do central (`pre-migrate-prd-…`) congelou o LXC por alguns minutos, e com ele o obo, que voltou sozinho; snapshot apagado depois da validação.
+- `.env`: `KUBO_TEST_NAME=kubo-prd KUBO_CENTRAL_DB=prd ./scripts/ops/kubo-test-use-central.sh` (não existe `kubo-prd-use-central.sh`); anterior em `~/.env.pre-central`.
+- `./ops/start_kubo_on_central.sh prd`: 3 credenciais provadas, digest-guard e health-guard ok, UI 200, 0 erros em 3 min, escrita rw → leitura ro no central.
+- Depois: backup do kubo-prd só do volume `kubo_study-materials` (oute-catalog #16), ADR-0003 "migration finished" (oute-infra-ops #48). Validado pelo dono; `kubo-surrealdb-1` e `kubo-backup-1` parados (`restart=no`), volume local mantido como último rollback até o semanal de 2026-11-21.
+- Com isso nenhum app roda banco próprio: o central atende `kubo/test`, `kubo/prd` e `obo/prd`.
 
 ## Preview do obo (v2.6.5 → v3.3.0), com export v2 sintético
 

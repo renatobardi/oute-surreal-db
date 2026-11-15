@@ -158,10 +158,12 @@ Só com o central **vazio** ou com backup/export dos dados (um engine novo come�
 Fluxo em 3 passos, os mesmos validados no kubo-test (ensaiados de novo ponta a ponta em 2026-10-24):
 
 1. **Dados**: `./ops/migrate_kubo_data.sh <test|prd>` (pára os escritores do kubo, snapshot do central, exporta o banco local por pipe, limpa o destino, importa com `scripts/import_dump.py` e **confere** contagem por tabela e KNN; só apaga o dump depois de conferir). Se a conferência falhar, os escritores continuam parados e o script mostra o comando para retomar o banco local.
-2. **Config do kubo**: no repo do kubo, `scripts/ops/kubo-<test|prd>-use-central.sh` (pede as 3 senhas no terminal; guarda o `.env` em `~/.env.pre-central`; soma o overlay `compose.central.yml`).
+2. **Config do kubo**: no repo do kubo, `scripts/ops/kubo-test-use-central.sh` (pede as 3 senhas no terminal; guarda o `.env` em `~/.env.pre-central`; soma o overlay `compose.central.yml`). Para o prd não há script próprio: `KUBO_TEST_NAME=kubo-prd KUBO_CENTRAL_DB=prd ./scripts/ops/kubo-test-use-central.sh`.
 3. **Subir**: `./ops/start_kubo_on_central.sh <test|prd>` (prova `app`/`ro`/`rw`, recria api+scheduler na mesma imagem, digest-guard + health-guard, smoke com escrita no central).
 
 Cada script tem `--check` (só leitura). Pré-requisito do prd: o kubo de produção precisa estar com o código novo (signin de database e o arquivo `compose.central.yml`), o que vem da promoção do CD para PRD.
+
+O passo 1 tira snapshot do **central**: no pool `dir` isso congela o LXC inteiro por alguns minutos, ou seja, **todos os tenants** (o obo de produção, desde 2026-11-11) ficam fora nesse intervalo. Rode numa janela combinada.
 
 **Não tire snapshot do LXC kubo-prd** para esse cutover: no pool `dir` o snapshot congela a instância por minutos (em produção seria indisponibilidade). O rollback do prd não precisa dele: o banco local não é tocado e `~/.env.pre-central` guarda a config anterior (`docker compose --profile local-db up -d`).
 
