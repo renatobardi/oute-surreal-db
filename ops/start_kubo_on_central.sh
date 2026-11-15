@@ -3,7 +3,7 @@
 # start_kubo_on_central.sh <test|prd> — sobe scheduler e api do kubo apontando para a instância central,
 # com os mesmos guards do deploy (digest e saúde) e um smoke que PROVA que o app grava no central.
 # Roda no Mac. Pré-requisito: `.env` do servidor já com o overlay compose.central.yml, SURREAL_AUTH_LEVEL=database
-# e as credenciais (repo do kubo: scripts/ops/kubo-<env>-use-central.sh) e os dados já copiados e
+# e as credenciais (repo do kubo: KUBO_TEST_NAME=kubo-<env> KUBO_CENTRAL_DB=<env> scripts/ops/kubo-test-use-central.sh) e os dados já copiados e
 # conferidos (ops/migrate_kubo_data.sh).
 #
 # Passos: pré-checagens -> prova das 3 credenciais (app/rw/ro) -> recria api+scheduler na MESMA imagem que
